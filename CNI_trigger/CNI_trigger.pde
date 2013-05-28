@@ -1,18 +1,18 @@
 /*
  * CNI_trigger sketch for Arduino.
- * 
- * 
+ *
+ *
  * A simple sketch to generate TTl pulses when told to do so through a serial
- * port command.  
+ * port command.
  *
  * When running this sketch on a Teensy, be sure to set the "USB Type" to
- * "Serial" (under the Arduino Tools menu). 
- * 
- * This sketch will also listen for input pulses and send out a serial port 
+ * "Serial" (under the Arduino Tools menu).
+ *
+ * This sketch will also listen for input pulses and send out a serial port
  * character whenever one is detected. It uses an external interrupt, so it
- * can reliably detect very brief pulses. We use this to detect the GE 3.3v 
- * scope trigger pulses (~4 usec pulse duration). 
- * 
+ * can reliably detect very brief pulses. We use this to detect the GE 3.3v
+ * scope trigger pulses (~4 usec pulse duration).
+ *
  *
  * Copyright 2011 Robert F. Dougherty.
  * This program is free software: you can redistribute it and/or modify
@@ -32,10 +32,13 @@
  * HISTORY:
  * 2011.03.28 RFD (bobd@stanford.edu) finished a working version.
  * 2011.05.24 RFD: cleaned up source & comments, removed down-counter code,
- * and added a serial message upon every input pulse that's detected.
+ *                 and added a serial message upon every input pulse that's
+                   detected.
+ * 2013.05.28 RFD: added 8 more triggerable outputs. (See the help text
+ *                 below for usage info.)
  */
 
-#define VERSION "1.0"
+#define VERSION "2.0"
 
 // Flash library is available from http://arduiniana.org/libraries/Flash/
 #include <Flash.h>
@@ -46,13 +49,13 @@
 #define DEFAULT_OUT_PULSE_MSEC 5
 #define DEFAULT_IN_PULSE_STATE 0
 
-// Most Arduino boards have two external interrupts: 
-// 0 (on digital pin 2) and 1 (on digital pin 3). On the 
+// Most Arduino boards have two external interrupts:
+// 0 (on digital pin 2) and 1 (on digital pin 3). On the
 // Teensy, these pins aremight be different (check docs).
 #define INTERRUPT 0
 
 // The approximate duration of the output pulse, in milliseconds.
-// Note that we don't account for delays in the code, so it will 
+// Note that we don't account for delays in the code, so it will
 // always be a bit longer than this.
 unsigned int g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
 
@@ -62,7 +65,7 @@ unsigned int g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
   // Teensy2.0++ has LED on D6 and INT0 on pin 0 (D0)
   const byte g_outPin = 6;
   const byte g_inPin = 0;
-  // We'll use port C (pins 0,1,2,3,13,14,15,4) 
+  // We'll use port C (pins 0,1,2,3,13,14,15,4)
   // PIN10 is port C on the teensy 2
   #define OUT_PORTREG CORE_PIN10_PORTREG
   #define OUT_PINREG CORE_PIN10_PINREG
@@ -71,7 +74,7 @@ unsigned int g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
   // Teensy2.0 has LED on pin 11 and INT0 on pin 5 (D0)
   const byte g_outPin = 11;
   const byte g_inPin = 5;
-  // We'll use port B (pins 0,1,2,3,13,14,15,4) 
+  // We'll use port B (pins 0,1,2,3,13,14,15,4)
   // PIN0 is port B on the teensy 2
   #define OUT_PORTREG CORE_PIN0_PORTREG
   #define OUT_PINREG CORE_PIN0_PINREG
@@ -90,7 +93,7 @@ volatile unsigned long g_digitalStart;
 // Instantiate Messenger object used for serial port communication.
 Messenger g_message = Messenger(',','[',']');
 
-// Create the Message callback function. This function is called whenever a complete 
+// Create the Message callback function. This function is called whenever a complete
 // message is received on the serial port.
 void messageReady() {
   int val[10];
@@ -100,7 +103,7 @@ void messageReady() {
     // get the command byte
     char command = g_message.readChar();
     switch(command) {
-    
+
     case '?': // display help text
       Serial << F("CNI Trigger Device\n");
       Serial << F("Sends TTL pulses out on pin ") << (int)g_outPin << F(".\n");
@@ -118,9 +121,9 @@ void messageReady() {
       Serial << F("[r]   reset default state.\n\n");
       Serial << F("[s,D] Send data (D) out over the local serial port. D can be up to 64\n");
       Serial << F("      bytes any binary data, except that it cannot contain the ASCII codes\n");
-      Serial << F("      for '[', ']', or ','. The data are sent out at ") << BAUD << F(" bps.\n\n");      
+      Serial << F("      for '[', ']', or ','. The data are sent out at ") << BAUD << F(" bps.\n\n");
       break;
-      
+
     case 'o': // Set out-pulse duration (msec)
       while(g_message.available()) val[i++] = g_message.readInt();
       if(i>1){
@@ -130,13 +133,13 @@ void messageReady() {
       }
       Serial << F("Output pulse duration is set to ") << g_outPulseDuration << F(" msec.\n");
       break;
- 
+
     case 't': // force output trigger
       triggerOut();
       // Automatically disable input pulse detection
       setInPulseState(0);
       break;
-      
+
     case 'd': // fast digital output
       while(g_message.available()) val[i++] = g_message.readInt();
       if(i!=1){
@@ -166,7 +169,7 @@ void messageReady() {
         Serial << F("WARNING: empty string.\n");
       }
       break;
-      
+
     default:
       Serial << F("[") << command << F("]\n");
       Serial << F("ERROR: Unknown command.\n\n");
@@ -183,23 +186,23 @@ void setup()
   Serial << F("* Copyright 2011 Bob Dougherty <bobd@stanford.edu>\n");
   Serial << F("* http://cniweb.stanford.edu/wiki/CNI_widgets\n");
   Serial << F("*********************************************************\n\n");
-  
-  // This probably isn't necessary- external interrupts work even in OUTPUT mode. 
+
+  // This probably isn't necessary- external interrupts work even in OUTPUT mode.
   pinMode(g_inPin, INPUT);
-  
+
   for(byte i=0; i<8; i++){
     // Could set this quickly by writing a bitmask to the data-direction reg (e.g., DDRB)
     pinMode(c_outPins[i], OUTPUT);
     digitalWrite(c_outPins[i], LOW);
   }
   setInPulseState(DEFAULT_IN_PULSE_STATE);
-  
+
   // Attach the callback function to the Messenger
   g_message.attach(messageReady);
-  
+
   // Set up the UART to support streaming serial data through.
   g_uart.begin(BAUD);
-  
+
   Serial << F("CNI Trigger Ready. Send the ? command ([?]) for help.\n\n");
 }
 
@@ -219,7 +222,7 @@ void loop(){
     if(millis()-g_digitalStart > g_outPulseDuration)
       digitalOut(0);
   }
-    
+
   // Handle Messenger's callback:
   if(Serial.available())  g_message.process(Serial.read());
 }
@@ -237,7 +240,7 @@ void setInPulseState(byte state){
     detachInterrupt(INTERRUPT);
 }
 
-// The following is an interrupt routine that is run each time the 
+// The following is an interrupt routine that is run each time the
 // a pulse is detected on the trigger input pin.
 void triggerIn(){
   Serial << F("p");
