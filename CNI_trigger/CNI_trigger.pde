@@ -62,10 +62,20 @@ unsigned int g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
   // Teensy2.0++ has LED on D6 and INT0 on pin 0 (D0)
   const byte g_outPin = 6;
   const byte g_inPin = 0;
+  // We'll use port C (pins 0,1,2,3,13,14,15,4) 
+  // PIN10 is port C on the teensy 2
+  #define OUT_PORTREG CORE_PIN10_PORTREG
+  #define OUT_PINREG CORE_PIN10_PINREG
+  static const byte c_outPins[] = {10, 11, 12, 13, 14, 15, 16, 17};
 #elif defined(__AVR_ATmega32U4__)
   // Teensy2.0 has LED on pin 11 and INT0 on pin 5 (D0)
   const byte g_outPin = 11;
   const byte g_inPin = 5;
+  // We'll use port B (pins 0,1,2,3,13,14,15,4) 
+  // PIN0 is port B on the teensy 2
+  #define OUT_PORTREG CORE_PIN0_PORTREG
+  #define OUT_PINREG CORE_PIN0_PINREG
+  static const byte c_outPins[] = {0, 1, 2, 3, 13, 14, 15, 4};
 #else
   #error "Unknown board!"
 #endif
@@ -75,6 +85,7 @@ byte g_inPulseEdge = FALLING;
 
 volatile byte g_outPinOn = false;
 volatile unsigned long g_outPulseStart;
+volatile unsigned long g_digitalStart;
 
 // Instantiate Messenger object used for serial port communication.
 Messenger g_message = Messenger(',','[',']');
@@ -97,6 +108,10 @@ void messageReady() {
       Serial << F("\nCommands:\n");
       Serial << F("[t]   will send a trigger pulse. This also disables the input pulse\n");
       Serial << F("      detection. Send a [p] command to re-enable it.\n\n");
+      Serial << F("[d,N] will pulse any of the 8 digital outputs. The value N is a single\n");
+      Serial << F("      byte bitmask. The pins are (in order): ");
+      for(i=0; i<8; i++)  Serial << (int)c_outPins[i] << F(" ");
+      Serial << F("\n      E.g., to pulse pin ") << (int)c_outPins[0] << F(" and ") <<  (int)c_outPins[0] << F(", use [d,17] (1+16).\n\n");
       Serial << F("[o,N] set the output pulse duration to N milliseconds. Send with\n");
       Serial << F("      no argument to show the current pulse duration.\n\n");
       Serial << F("[p]   enable input pulse detection. Send a [t] to disable.\n\n");
@@ -117,12 +132,18 @@ void messageReady() {
       break;
  
     case 't': // force output trigger
-      // First force the pin low, in case it was already on. This will ensure that
-      // we get a change on the pin no matter what state we were in.
-      if(g_outPinOn) digitalWrite(g_outPin, LOW);
       triggerOut();
       // Automatically disable input pulse detection
       setInPulseState(0);
+      break;
+      
+    case 'd': // fast digital output
+      while(g_message.available()) val[i++] = g_message.readInt();
+      if(i!=1){
+        Serial << F("ERROR: Digital output requires a single integer for the bitmask.\n");
+      }else if(i==1){
+          digitalOut(val[0]);
+      }
       break;
 
     case 'p': // turn on input pulse detection
@@ -166,8 +187,11 @@ void setup()
   // This probably isn't necessary- external interrupts work even in OUTPUT mode. 
   pinMode(g_inPin, INPUT);
   
-  pinMode(g_outPin, OUTPUT);
-  digitalWrite(g_outPin, LOW);
+  for(byte i=0; i<8; i++){
+    // Could set this quickly by writing a bitmask to the data-direction reg (e.g., DDRB)
+    pinMode(c_outPins[i], OUTPUT);
+    digitalWrite(c_outPins[i], LOW);
+  }
   setInPulseState(DEFAULT_IN_PULSE_STATE);
   
   // Attach the callback function to the Messenger
@@ -187,6 +211,13 @@ void loop(){
     if(millis()<g_outPulseStart) g_outPulseStart += 4294967295UL;
     if(millis()-g_outPulseStart > g_outPulseDuration)
       digitalWrite(g_outPin, LOW);
+  }
+  if(OUT_PINREG){
+    // Turn off all digital outputs after the requested duration.
+    // Detect and correct counter wrap-around:
+    if(millis()<g_digitalStart) g_digitalStart += 4294967295UL;
+    if(millis()-g_digitalStart > g_outPulseDuration)
+      digitalOut(0);
   }
     
   // Handle Messenger's callback:
@@ -213,9 +244,17 @@ void triggerIn(){
 }
 
 void triggerOut(){
-    digitalWrite(g_outPin, HIGH);
-    g_outPinOn = true;
-    g_outPulseStart = millis();
-    //Serial << F("OUT\n");
+  // First force the pin low, in case it was already on. This will ensure that
+  // we get a change on the pin no matter what state we were in.
+  if(g_outPinOn) digitalWrite(g_outPin, LOW);
+  digitalWrite(g_outPin, HIGH);
+  g_outPinOn = true;
+  g_outPulseStart = millis();
+  //Serial << F("OUT\n");
 }
 
+void digitalOut(byte bitmask){
+  //OUT_PORTREG = OUT_PORTREG | bitmask;
+  OUT_PORTREG = bitmask;
+  g_digitalStart = millis();
+}
