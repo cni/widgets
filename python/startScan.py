@@ -14,7 +14,7 @@ def main(argv):
         return 1
 
     ser = serial.Serial(device, 115200, timeout=1)
-    time.sleep(0.05)
+    #time.sleep(0.05)
     # Send an out pulse
     ser.write('[t]\n');
     ser.close()
