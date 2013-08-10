@@ -1,5 +1,5 @@
 /*
- * CNI_trigger sketch for Arduino.
+ * CNI trigger sketch for Arduino.
  *
  *
  * A simple sketch to generate TTl pulses when told to do so through a serial

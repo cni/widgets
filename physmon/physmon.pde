@@ -1,27 +1,29 @@
 /*
- * Sketch to read serial data from the GE MR750 physiological monitoring 
- * port in the PGR cabinet. 
+ * CNI physmon
+ *
+ * Sketch to read serial data from the GE MR750 physiological monitoring
+ * port in the PGR cabinet.
  *
  * The data come in 12-byte (96-bit) packets delivered at 115200 bps. A packet
  * comes every 5ms, with silence between packets. This produces data bursts
  * of 96bits / 115.2bits/ms = .8333ms with 5 - .8333 = 4.1667ms of silence.
- * (This timing pattern was confirmed with a scope.) So we can detect the start 
+ * (This timing pattern was confirmed with a scope.) So we can detect the start
  * of a data packet by waiting for the silent period before the data arrives.
- * Here we only care about the PPG value. But the code could be easily modified 
+ * Here we only care about the PPG value. But the code could be easily modified
  * to do something with the other physiological readings.
  *
  * To detect a pulse, we compute a running mean and standard deviation and
  * compute a z-score for each new data point. When several consecutive data
- * point z-scores are above threshold, we signal that a pulse was detected. 
+ * point z-scores are above threshold, we signal that a pulse was detected.
  * With a Teensy 2++ (which has 8k SRAM), we can maintain a buffer size of
  * 1024, which is 1024 * 0.005 = 5.12 seconds. This seems to be enough to give
  * a very stable pulse detection.
  *
- * The PPG value sum and its sum-of-squares are maintained in long and unsigned 
- * long (respectively) buffers. So, if your PPG data values are high and your 
- * buffer big enough, you might overflow these containers. With a 1024 buffer, 
- * you can safely capture the full range of int16 values in the data sum. 
- * However, the sum-of-squares will limit you to sqrt(2^32/1024) = 2048 as your 
+ * The PPG value sum and its sum-of-squares are maintained in long and unsigned
+ * long (respectively) buffers. So, if your PPG data values are high and your
+ * buffer big enough, you might overflow these containers. With a 1024 buffer,
+ * you can safely capture the full range of int16 values in the data sum.
+ * However, the sum-of-squares will limit you to sqrt(2^32/1024) = 2048 as your
  * average deviation from the mean. If you expect deviations higher than this,
  * then you will want to decrease the buffer size or maybe try a larger container
  * for the sum-of-squares.
@@ -33,7 +35,7 @@
  *
  * Copyright 2011 Robert F. Dougherty (bobd@stanford.edu)
  */
- 
+
 /*
 
 Python code to generate simulated data:
@@ -87,8 +89,8 @@ ser.close()
 #define DEFAULT_IN_STATE 0
 #define DEFAULT_IN_EDGE FALLING
 
-// We need to be careful that our two buffers will fit in available SRAM. We 
-// also want them to be a power of two so that we can use bit-shifting for division. 
+// We need to be careful that our two buffers will fit in available SRAM. We
+// also want them to be a power of two so that we can use bit-shifting for division.
 // If the update rate is 5ms, then 256 samples will give us a temporal window
 // of ~1.3 sec, 512 = 2.6 sec, and 1024 just over 5 sec.
 #if defined(__AVR_AT90USB1286__)
@@ -176,7 +178,7 @@ byte g_displayUpdateInterval;
 byte g_numConsecutiveZscores;
 
 // The approximate duration of the output pulse, in milliseconds.
-// Note that we don't account for delays in the code, so it will 
+// Note that we don't account for delays in the code, so it will
 // always be a bit longer than this.
 unsigned int g_outPinDuration = DEFAULT_OUT_PULSE_MSEC;
 byte g_physioOutFlag = DEFAULT_PHYSIO_OUT_STATE;
@@ -193,7 +195,7 @@ HardwareSerial g_Uart = HardwareSerial();
 // Instantiate Messenger object used for serial port communication.
 Messenger g_message = Messenger(',','[',']');
 
-// Create the Message callback function. This function is called whenever a complete 
+// Create the Message callback function. This function is called whenever a complete
 // message is received on the serial port.
 void messageReady() {
   int val[16];
@@ -203,14 +205,14 @@ void messageReady() {
     // get the command byte
     command = g_message.readChar();
     switch(command) {
-    
+
     case '?': // display help text
       Serial << F("CNI PhysMon: Monitor GE physio data stream on UART Rx pin.\n");
       Serial << F("Pulse pulses are output on pin ") << (int)PULSE_OUT_PIN << F(".\n");
       Serial << F("Trigger pulses are output on pin ") << (int)TRIGGER_OUT_PIN << F(".\n");
       Serial << F("\nCommands:\n");
       Serial << F("[s,X,N] Set parameter X to value N. (Omit N to echo the current value.)\n");
-      Serial << F("  [s,d,N] Set the display update interval.\n");     
+      Serial << F("  [s,d,N] Set the display update interval.\n");
       Serial << F("  [s,n,N] Set the number of consecutive z-scores needed to pulse.\n");
       Serial << F("  [s,o,N] Set the output pulse duration to N milliseconds.\n");
       Serial << F("  [s,p] Enable scan timing pulse detection.\n");
@@ -224,7 +226,7 @@ void messageReady() {
       Serial << F("[r]   Reset default state.\n\n");
       Serial << F("[t]   Send a trigger pulse.\n");
       break;
-    
+
     case 's': // Set parameter value
       if(g_message.available())
         paramName = g_message.readChar();
@@ -232,7 +234,7 @@ void messageReady() {
         Serial << F("ERROR: Set parameter requires a parameter name.\n");
       while(g_message.available()) val[i++] = g_message.readInt();
       switch(paramName) {
-        
+
         case 'd':
           if(i==1)
             g_displayUpdateInterval = val[0];
@@ -246,7 +248,7 @@ void messageReady() {
           else
             Serial << F("Num consecutive z-scores is set to ") << (int)g_numConsecutiveZscores << F(".\n");
         break;
-        
+
         case 'o': // Set out-pulse duration (msec)
           if(i==1)
             g_outPinDuration = val[0];
@@ -263,12 +265,12 @@ void messageReady() {
           }else
             Serial << F("ERROR: Set in trigger state requires one param.\n");
         break;
-        
+
         case 'r': // Set pulse refractory period (msec)
           if(i==1)
             g_refractoryTics = val[0]/DATA_INTERVAL_MILLISEC;
           else
-            Serial << F("Pulse refractory period is set to ") << g_refractoryTics*DATA_INTERVAL_MILLISEC 
+            Serial << F("Pulse refractory period is set to ") << g_refractoryTics*DATA_INTERVAL_MILLISEC
                    << F(" msec (") << g_refractoryTics << F(" tics).\n");
           break;
 
@@ -283,7 +285,7 @@ void messageReady() {
           Serial << F("ERROR: Unknown parameter name '") << paramName << F("'.\n\n");
         } // end switch paramName
       break;
-    
+
     case 'p': // enable/disable physio output
       while(g_message.available()) val[i++] = g_message.readInt();
       if(i>1){
@@ -307,7 +309,7 @@ void messageReady() {
       g_displayUpdateInterval = DEFAULT_REFRESH_INTERVAL;
       digitalWrite(TRIGGER_OUT_PIN, LOW);
       break;
-      
+
     case 't': // force output trigger
       // First force the pin low, in case it was already on. This will ensure that
       // we get a change on the pin no matter what state we were in.
@@ -328,17 +330,17 @@ void setup(){
   g_numConsecutiveZscores = DEFAULT_NUM_CONSEC_Z;
   g_refractoryTics = DEFAULT_REFRACTORY_TICS;
   g_displayUpdateInterval = DEFAULT_REFRESH_INTERVAL;
-  
+
   g_curBuffIndex = 0;
-  
+
   // initialize output pins.
   pinMode(PULSE_OUT_PIN, OUTPUT);
   digitalWrite(PULSE_OUT_PIN, LOW);
   pinMode(TRIGGER_OUT_PIN, OUTPUT);
   digitalWrite(TRIGGER_OUT_PIN, LOW);
-  
+
   // Initialize input pin
-  // This probably isn't necessary- external interrupts work even in OUTPUT mode. 
+  // This probably isn't necessary- external interrupts work even in OUTPUT mode.
   pinMode(TRIGGER_IN_PIN, INPUT);
   setInTriggerState(DEFAULT_IN_STATE);
 
@@ -360,7 +362,7 @@ void setup(){
   }
 
   g_Uart.begin(115200);
-    
+
   Serial.begin(115200);
   Serial << F("*********************************************************\n");
   Serial << F("* CNI Physmon version ") << VERSION << F("\n");
@@ -384,12 +386,12 @@ void loop(){
   // We only fire an output when we get N consecutive zscores above threshold.
   static byte curNumZscores;
   static byte bpm;
- 
+
   // ticDiff is the increment in the tic count between this data packet and the previous one.
   // This function sets the data in the global g_data.
   // MAYBE PASS IN THE GLOBAL FOR CLARITY? OR JUST INLINE THE CODE?
   byte ticDiff = getDataPacket();
-  
+
   if(ticDiff==255){
     // This means that we had to resync. We don't process anything, just show status.
     snprintf(stringBuffer,SSD1306_LCDLINEWIDTH+1,"* resyncing packets...");
@@ -400,7 +402,7 @@ void loop(){
     int zscore = processDataPacket();
     if(zscore>g_thresh && pulseIntervalTics>g_refractoryTics)
       curNumZscores++;
-    
+
     boolean pulseNow = false;
     if((curNumZscores>g_numConsecutiveZscores)){
       // PULSE DETECTED!
@@ -412,7 +414,7 @@ void loop(){
 
     if(g_physioOutFlag==1){
       // 1 for text: tic,resp,ppg,z-score,pulse bit
-      Serial << g_data.tic << F(",") << g_data.resp << F(",") << g_data.ppg << F(",") 
+      Serial << g_data.tic << F(",") << g_data.resp << F(",") << g_data.ppg << F(",")
              << zscore << F(",") << (int)pulseNow << F("\n");
     }else if(g_physioOutFlag==2){
       // 2 for binary tic(uint16) resp(int16) ppg(int16) z-score(uint8) pulse(uint8)
@@ -423,9 +425,9 @@ void loop(){
     }
     refreshDisplay(zscore, stringBuffer, ticDiff, pulseNow);
   }
-  
+
   updateOutPins();
-  
+
   // Handle Messenger's callback:
   if(Serial.available())  g_message.process(Serial.read());
 }
@@ -439,7 +441,7 @@ byte getDataPacket(){
   static unsigned int prevTic;
   static boolean resynced;
   unsigned int ticDiff;
-  
+
   // If we don't have our bytes, we return immediately.
   if(g_Uart.available()<12){
     ticDiff = 0;
@@ -447,7 +449,7 @@ byte getDataPacket(){
     // Read the 12 bytes
     for(byte i=0; i<12; i++)
       g_data.byteArray[i] = g_Uart.read();
-    
+
     // Check for valid data by comparing current tic to last tic (should increment by 1).
     ticDiff = g_data.tic - prevTic;
     if((ticDiff<1 || ticDiff>2) && !resynced){
@@ -457,16 +459,16 @@ byte getDataPacket(){
       resync();
       resynced = true;
     }else{
-      resynced = false; 
+      resynced = false;
     }
   }
   prevTic = g_data.tic;
   return(ticDiff);
 }
 
-// Resync to the incomming serial stream by waiting for 
+// Resync to the incomming serial stream by waiting for
 // the dead time between data packets.
-// 
+//
 // flush to clear input buffer
 // loop, timing the interval between bytes until it exceeds the threshold.
 // Note that this function will block until it hits a silent period in the serial stream.
@@ -516,14 +518,14 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
   static byte curY = SSD1306_LCDHEIGHT;
   // The current data frame. Used to know when we are due for a display refresh.
   static byte curRefreshFrame;
-  
+
   curRefreshFrame += ticDiff;
 
   // CurY will contain an average z-score across the g_displayUpdateInterval number of frames.
   curY -= zscore/g_displayUpdateInterval;
   if(pulseOut)
     oled.drawline(curX, 10, curX, 14, WHITE);
-  if(curRefreshFrame>g_displayUpdateInterval){ 
+  if(curRefreshFrame>g_displayUpdateInterval){
     // Update the running plot
     // Clear the graph just in front of the current x position:
     oled.fillrect(curX+1, 8, 16, SSD1306_LCDHEIGHT-8, BLACK);
@@ -554,7 +556,7 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
 void updateOutPins(){
   // Turn off the output pins after the requested duration.
   unsigned long curMillis = millis();
-  
+
   if(g_triggerPinOn){
     // Detect and correct counter wrap-around:
     if(curMillis<g_triggerOutStart) g_triggerOutStart += 4294967295UL;
@@ -564,7 +566,7 @@ void updateOutPins(){
       analogWrite(LED_RED_PIN, 0);
     }
   }
-  
+
   if(g_pulsePinOn){
     // Detect and correct counter wrap-around:
     if(curMillis<g_pulseOutStart) g_pulseOutStart += 4294967295UL;
@@ -605,7 +607,7 @@ void setInTriggerState(byte state){
     detachInterrupt(TRIGGER_IN_INT);
 }
 
-// The following is an interrupt routine that is run each time the 
+// The following is an interrupt routine that is run each time the
 // a pulse is detected on the trigger input pin.
 void triggerIn(){
   // *** WORK HERE ***
@@ -617,7 +619,7 @@ void triggerIn(){
 
 
 /*
- * Integer square-root approximation, by Jim Ulery. 
+ * Integer square-root approximation, by Jim Ulery.
  * from http://www.azillionmonkeys.com/qed/sqroot.html
  */
 unsigned int isqrt(unsigned long val) {

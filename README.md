@@ -1,4 +1,8 @@
-Arduino projects for the Stanford Center for Cognitive and Neurobiological Imaging (CNI).
+CNI widgets
+=======
+
+Designs and firmware for various little devices used at the Stanford Center for
+Cognitive and Neurobiological Imaging (CNI).
 
 We often use the Teensy board, due to the flexible USB interface. E.g., it can be
 configured to emulate a USB keyboard. Having USB separate from the AVR UART is also

@@ -1,5 +1,5 @@
-/* 
- * MagicTouch
+/*
+ * CNI touch
  *
  * Sketch to read a 4-wire resitive touch screen and emulate a USB mouse device.
  * This essentially makes the touch screen a large (single-touch) trackpad.
@@ -15,15 +15,15 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-// If you enable ABSOLUTE mode, you'll get absolute position values on the serial port instead of 
-// mouse movements. Be sure to change the teensy USB device type from keyboard/mouse to serial 
+// If you enable ABSOLUTE mode, you'll get absolute position values on the serial port instead of
+// mouse movements. Be sure to change the teensy USB device type from keyboard/mouse to serial
 // (under the tools menu).
 #define ABSOLUTE
 
 // Touch panel wiring.
 // We will switch data-direction and digial values often and in time-critical code,
 // so we'll use direct mapping to the data-direction register (DDR) and the digital
-// value register (PORT). 
+// value register (PORT).
 // NOTE: if you chane te pins that you use, change these values appropriately!
 #define TOUCH_PORTREG CORE_PIN21_PORTREG
 #define TOUCH_DDRREG  CORE_PIN21_DDRREG
@@ -54,7 +54,7 @@ static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN
 #define KEEP_SIZE (1<<KEEP_BITS)
 #define DISCARD_SIZE (BUFF_SIZE-KEEP_SIZE)
 
-// Should we allow tap-to-click? This is working, but isn't very smooth. 
+// Should we allow tap-to-click? This is working, but isn't very smooth.
 // We'll probably just keep this off and use a separate button for clicking.
 byte g_doClick = false;
 // Milliseconds before we start auto-repeating a keystroke.
@@ -63,20 +63,20 @@ unsigned int g_keyAutoRepeatDelay = 250;
 byte g_sendNans = false;
 
 void setup()
-{ 
+{
   pinMode(LED, OUTPUT);
   pinMode(BUTTON_1_PIN, INPUT_PULLUP);
   pinMode(BUTTON_2_PIN, INPUT_PULLUP);
   pinMode(BUTTON_3_PIN, INPUT_PULLUP);
   pinMode(BUTTON_4_PIN, INPUT_PULLUP);
-#ifdef ABSOLUTE  
+#ifdef ABSOLUTE
   Serial.begin(57600);
 #endif
 }
 
 // Since this controller is dedicated to reading the touch panel and buttons, we use a
 // simple polling loop. Another option is have an interrupt-driven approach. But that
-// would be overkill here. 
+// would be overkill here.
 void loop()
 {
   static byte numDiscarded;
@@ -96,12 +96,12 @@ void loop()
   unsigned long curMillis;
   int meanPosX;
   int meanPosY;
-  
+
   // Get the de-bounced state of the four buttons.
   // We currently use the third button to emulate a left-click and the fourth the emulate a right-click.
   buttonState = readButtonState();
   curMillis = millis();
-    
+
   #ifndef ABSOLUTE
   Mouse.set_buttons(buttonState&c_buttonMask[2], 0, buttonState&c_buttonMask[3]);
   // To emulate scroll wheel: Mouse.scroll(val): val=[-127,+127] (+ to scroll up, - to scroll down)
@@ -115,7 +115,7 @@ void loop()
     lastKeyPress[1] = curMillis;
   }
   #endif
-  
+
   // Read and process the touchpad.
   if(!readTouchPad(&posX, &posY)){
     // Not currently being touched.
@@ -206,7 +206,7 @@ void loop()
       lastPosY = meanPosY;
     }
   }
-  #ifdef ABSOLUTE 
+  #ifdef ABSOLUTE
   static unsigned long prevMillis;
   if(curMillis-prevMillis>=10 && tracking){
     if(g_sendNans){
@@ -234,15 +234,15 @@ byte readButtonState()
   static byte pendingStateChange;
   static unsigned long bMillis[4];
   unsigned long curMillis = millis();
-  
+
   // Read the state of the buttons
   byte rawButtonState = BUTTON_PINREG;
   // Use "not xor" to find bits that are different
   byte stateChange = ~(rawButtonState ^ curButtonState);
-  
+
   for(byte i=0; i<4; i++){
     if(stateChange & c_buttonMask[i]){
-      // Button i's state has changed, but we won't let it go through 
+      // Button i's state has changed, but we won't let it go through
       // unless it remains changed for longer than the debounce time.
       if(pendingStateChange & c_buttonMask[i]){
         // there was a pending state change for button i; has debounce time expired?
@@ -269,8 +269,8 @@ boolean readTouchPad(int* posX, int* posY)
 {
   // In standby mode YNEG is pulled up, so we know that we are touched if YNEG goes low.
   if(analogRead(TOUCH_YNEG_PIN)<500){
-    // Horizontal read: pull one X high and the other low to create a horizontal voltage 
-    // gradient, and then read out the voltage from one of the Y pads. 
+    // Horizontal read: pull one X high and the other low to create a horizontal voltage
+    // gradient, and then read out the voltage from one of the Y pads.
     TOUCH_DDRREG &= ~(TOUCH_YPOS | TOUCH_YNEG); // Set YPOS and YNEG as inputs
     TOUCH_DDRREG |=  (TOUCH_XPOS | TOUCH_XNEG); // Set XPOS and XNEG as outputs
     TOUCH_PORTREG &= ~(TOUCH_YPOS | TOUCH_YNEG | TOUCH_XPOS); // Pull these 3 low
@@ -278,9 +278,9 @@ boolean readTouchPad(int* posX, int* posY)
     // wait a bit for things to settle, then read from YNEG
     delayMicroseconds(500);
     *posX = analogRead(TOUCH_YNEG_PIN);
-  
-    // Vertical read: pull one Y high and the other low to create a vertical voltage 
-    // gradient, and then read out the voltage from one of the X pads. 
+
+    // Vertical read: pull one Y high and the other low to create a vertical voltage
+    // gradient, and then read out the voltage from one of the X pads.
     TOUCH_DDRREG &= ~(TOUCH_XPOS | TOUCH_XNEG); // Set XPOS and XNEG as inputs
     TOUCH_DDRREG |=  (TOUCH_YPOS | TOUCH_YNEG); // Set YPOS and YNEG as outputs
     TOUCH_PORTREG &= ~(TOUCH_XPOS | TOUCH_XNEG | TOUCH_YPOS); // Pull these 3 low
@@ -288,7 +288,7 @@ boolean readTouchPad(int* posX, int* posY)
     // wait a bit for things to settle, then read from XNEG
     delayMicroseconds(500);
     *posY = analogRead(TOUCH_XNEG_PIN);
-    
+
     // Go back to standby mode
     TOUCH_DDRREG &= ~(TOUCH_YPOS | TOUCH_XNEG | TOUCH_YNEG);
     TOUCH_DDRREG |=  (TOUCH_XPOS);
@@ -301,7 +301,7 @@ boolean readTouchPad(int* posX, int* posY)
 }
 
 /*
- * Integer square-root approximation, by Jim Ulery. 
+ * Integer square-root approximation, by Jim Ulery.
  * from http://www.azillionmonkeys.com/qed/sqroot.html
  */
 unsigned int isqrt(unsigned long val) {
@@ -316,17 +316,17 @@ unsigned int isqrt(unsigned long val) {
 }
 
 
-/* I found the signals to be good enough for use as a trackpad without calibration. But if you did 
+/* I found the signals to be good enough for use as a trackpad without calibration. But if you did
  * want to calibrate:
  * Measure lower left (ll), lower right (lr), upper left (ul), upper right (ur) and middle (md).
- * Then, 
+ * Then,
  *    m = [X_ll, X_lr, X_ul, X_ur, X_md; Y_ll, Y_lr, Y_ul, Y_ur, Y_md];
  *    cal = [[0,1,0,1,.5; 0,0,1,1,.5];[1 1 1 1 1]] * pinv([m;[1 1 1 1 1]])
  * to use the cal matrix:
  *    relativeLocation = cal*[Xd;Yd;1]
  *    Xr = cal(0,0)*Xd+cal(1,0)*Yd+cal(2,0)
  *    Yr = cal(0,1)*Xd+cal(1,1)*Yd+cal(2,1)
- * e.g., 
+ * e.g.,
  *    m = [440,50,600,120,360; 92,40,480,280,230];
  *    cal = round([[0,10000,0,10000,5000; 0,0,10000,10000,5000];[1 1 1 1 1]] * pinv([m;[1 1 1 1 1]]))
  *    cal = [-25    9   10829
@@ -338,11 +338,11 @@ unsigned int isqrt(unsigned long val) {
  *   int Yd1 = 500; int Yd2 = 900; int Yd3 = 100;
  *   // See the AVR341 datasheet, e.g. http://www.adafruit.com/datasheets/AVR341.pdf
  *   g_coeff[0] = (long)(Xd1*(Yt2-Yt3) + Xd2*(Yt3-Yt1) + Xd3*(Yt1-Yt2)) / (Xt1*(Yt2-Yt3) + Xt2*(Yt3-Yt1) + Xt3*(Yt1-Yt2));
- *   g_coeff[1] = (long)(g_coeff[0]*(Xt3-Xt2) + Xd2 - Xd3) / (Yt2-Yt3); 
+ *   g_coeff[1] = (long)(g_coeff[0]*(Xt3-Xt2) + Xd2 - Xd3) / (Yt2-Yt3);
  *   g_coeff[2] = (long)Xd3 - g_coeff[0]*Xt3 - g_coeff[1]*Yt3;
  *   g_coeff[3] = (long)(Yd1*(Yt2-Yt3) + Yd2*(Yt3-Yt1) + Yd3*(Yt1-Yt2)) / (Xt1*(Yt2-Yt3) + Xt2*(Yt3-Yt1) + Xt3*(Yt1-Yt2));
  *   g_coeff[4] = (long)(g_coeff[3]*(Xt3-Xt2) + Yd2 - Yd3) / (Yt2-Yt3);
- *   g_coeff[5] = (long)Yd3 - g_coeff[3]*Xt3 - g_coeff[4]*Yt3; 
+ *   g_coeff[5] = (long)Yd3 - g_coeff[3]*Xt3 - g_coeff[4]*Yt3;
  * }
  *
  * void getCoords(int rawTouchX, int rawTouchY, int *touchX, int *touchY){
