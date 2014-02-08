@@ -4,12 +4,40 @@
  * Sketch to read a 4-wire resitive touch screen and emulate a USB mouse device.
  * This essentially makes the touch screen a large (single-touch) trackpad.
  *
- * It's been developed for and tested with a Keytec touch screen (e.g.,
- * http://www.magictouch.com/KTT-084LAM.html). The firmware is designed to run
- * on a teensy 2 (http://www.pjrc.com/store/teensy.html), but could be easily
- * adapted to run on the more powerful teensy 3.1. The pins used are configured
- * below. For the teensy 2, we connected the four wires for the touch screen 
- * to pins 18-21 and a pushbutton to pin 0.
+ * It's been developed for and tested with a Keytec touch screen and a teensy 2, 
+ * but could be easily adapted to run on the more powerful teensy 3.1. 
+ *
+ * More details:
+ *
+ *   http://www.pjrc.com/store/teensy.html
+ *
+ * Four-wire resistive touch glass from Keytec:
+ *
+ *   http://www.magictouch.com/KTT-084LAM.html
+ * 
+ * Note that we chose an 8.4 inch glass, but they offer other size options. 
+ * Also, you don't need to buy their controller, just the glass. E.g.,
+ *
+ *   http://www.nextwarehouse.com/item/?135116_KEYTEC_INC__KTT084LAM
+ *
+ * The circuit is trivial-- you just need to wire the touch screen to four of 
+ * the microcontroller pins and a pushbutton to one of the pins and to ground. 
+ * We laser-cut some acrylic sheets to build a nice case for it. But we started 
+ * by just mounting it to a piece of cardboard and that worked fine!
+ *
+ * We ran the 6 wires from the touchscreen and pushbutton through an old 
+ * ethernet cable (which has 8 wires; 2 extra if you want to add more buttons. 
+ * The firmware will support up to 4) to our penetration panel, where each wire 
+ * connected to a pin on a db9 pen-panel RF filter. The microcontroller is 
+ * connected to the other side of the filter, and thus outside the scan room.
+ * 
+ * See the CNI wiki page for a picture, as well as links to matlab and python 
+ * code to read the touch values:
+ *
+ *   http://cni.stanford.edu/wiki/MR_Hardware#CNI_Touch-pad
+ *
+ * The pins used are #define configured below. For the teensy 2, we connected 
+ * the four wires for the touch screen to pins 18-21 and a pushbutton to pin 0.
  *
  * Copyright 2011 Robert F. Dougherty (bobd@stanford.edu)
  */
