@@ -5,7 +5,11 @@
  * This essentially makes the touch screen a large (single-touch) trackpad.
  *
  * It's been developed for and tested with a Keytec touch screen (e.g.,
- * http://www.magictouch.com/KTT-084LAM.html).
+ * http://www.magictouch.com/KTT-084LAM.html). The firmware is designed to run
+ * on a teensy 2 (http://www.pjrc.com/store/teensy.html), but could be easily
+ * adapted to run on the more powerful teensy 3.1. The pins used are configured
+ * below. For the teensy 2, we connected the four wires for the touch screen 
+ * to pins 18-21 and a pushbutton to pin 0.
  *
  * Copyright 2011 Robert F. Dougherty (bobd@stanford.edu)
  */
