@@ -1,8 +1,10 @@
 /*
  * CNI touch
  *
- * Sketch to read a 4-wire resitive touch screen and emulate a USB mouse device.
- * This essentially makes the touch screen a large (single-touch) trackpad.
+ * Sketch to read a 4-wire resitive touch screen and stream absolute position
+ * coordinates via a serial port. Alternatively, you can emulate a USB mouse,
+ * making it more like a large (single-touch) trackpad. (See "#define ABSOLUTE"
+ * for changing it from absolute to mouse-like.)
  *
  * It's been developed for and tested with a Keytec touch screen and a teensy 2, 
  * but could be easily adapted to run on the more powerful teensy 3.1. 
