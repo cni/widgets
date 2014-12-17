@@ -251,7 +251,7 @@ void loop()
     if(meanPosX>999) meanPosX = 999;
     if(meanPosY>999) meanPosY = 999;
     char tmp[20]; // resulting string limited to 20 chars
-    snprintf(tmp, 20, "X=%03d;Y=%03d;B=%01d;\n", meanPosX, meanPosY, buttonState);
+    snprintf(tmp, 20, "X=%03d;Y=%03d;B=%03d;\n", meanPosX, meanPosY, buttonState);
     Serial.print(tmp);
     prevMillis = curMillis;
   }
