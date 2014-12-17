@@ -51,16 +51,18 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-// If you enable ABSOLUTE mode, you'll get absolute position values on the serial port instead of
-// mouse movements. Be sure to change the teensy USB device type from keyboard/mouse to serial
-// (under the tools menu).
+// *** DEVICE MODE (mouse-emulating trackpad or absolute position via serial-port) ***
+// ABSOLUTE mode delivers absolute position values on the serial port instead of 
+// mouse movements. If you want it to behave like a simple track-pad that emulates 
+// a mouse, comment-out the line below and change the teensy USB device type from
+// 'serial' to 'keyboard/mouse' (under the Arduino 'tools' menu). 
 #define ABSOLUTE
 
-// Touch panel wiring.
+// *** WIRING UP THE CONNECTIONS ***
 // We will switch data-direction and digial values often and in time-critical code,
 // so we'll use direct mapping to the data-direction register (DDR) and the digital
 // value register (PORT).
-// NOTE: if you chane te pins that you use, change these values appropriately!
+// NOTE: if you chane the pins that you use, change these values appropriately!
 #define TOUCH_PORTREG CORE_PIN21_PORTREG
 #define TOUCH_DDRREG  CORE_PIN21_DDRREG
 #define TOUCH_YPOS CORE_PIN18_BITMASK
@@ -83,7 +85,9 @@ static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN
 #define LED 11
 
 // The touch readings are buffered, and some values at the beginning and end of a touch
-// epoch are discarded. These must be powers of two, and no more than 8 bits.
+// epoch are discarded. These must be powers of two, and no more than 8 bits. A larger
+// buffer makes for smoother movements, but reduces responsiveness. The values below
+// worked well for us, with a good balance between smoothness and responsiveness.
 #define BUFF_BITS 5
 #define BUFF_SIZE (1<<BUFF_BITS)
 #define KEEP_BITS 4
@@ -91,12 +95,11 @@ static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN
 #define DISCARD_SIZE (BUFF_SIZE-KEEP_SIZE)
 
 // Should we allow tap-to-click? This is working, but isn't very smooth.
-// We'll probably just keep this off and use a separate button for clicking.
+// So we kept this off and used a separate button for clicking.
 byte g_doClick = false;
+
 // Milliseconds before we start auto-repeating a keystroke.
 unsigned int g_keyAutoRepeatDelay = 250;
-
-byte g_sendNans = false;
 
 void setup()
 {
@@ -245,17 +248,11 @@ void loop()
   #ifdef ABSOLUTE
   static unsigned long prevMillis;
   if(curMillis-prevMillis>=10 && tracking){
-    if(g_sendNans){
-      Serial.print("X=NaN;Y=NaN;");
-    }else{
-      if(meanPosX>999) meanPosX = 999;
-      if(meanPosY>999) meanPosY = 999;
-      char tmp[20]; // resulting string limited to 128 chars
-      snprintf(tmp, 20, "X=%03d;Y=%03d;", meanPosX, meanPosY);
-      Serial.print(tmp);
-    }
-    Serial.print("B="); Serial.print(int(buttonState)); Serial.print(";");
-    Serial.println();
+    if(meanPosX>999) meanPosX = 999;
+    if(meanPosY>999) meanPosY = 999;
+    char tmp[20]; // resulting string limited to 20 chars
+    snprintf(tmp, 20, "X=%03d;Y=%03d;B=%01d;\n", meanPosX, meanPosY, buttonState);
+    Serial.print(tmp);
     prevMillis = curMillis;
   }
   #endif
