@@ -17,10 +17,11 @@
  *
  *   http://www.magictouch.com/KTT-084LAM.html
  * 
- * Note that we chose an 8.4 inch glass, but they offer other size options. 
- * Also, you don't need to buy their controller, just the glass. E.g.,
+ * Note that we chose an 8.4 inch glass, but a smaller size might be better to 
+ * reduce arm movements. It seems that the Keytec glass is now hard to get. This
+ * alternative from Adafruit seems to work well:
  *
- *   http://www.nextwarehouse.com/item/?135116_KEYTEC_INC__KTT084LAM
+ *   https://www.adafruit.com/products/1676
  *
  * The circuit is trivial-- you just need to wire the touch screen to four of 
  * the microcontroller pins and a pushbutton to one of the pins and to ground. 
@@ -29,9 +30,10 @@
  *
  * We ran the 6 wires from the touchscreen and pushbutton through an old 
  * ethernet cable (which has 8 wires; 2 extra if you want to add more buttons. 
- * The firmware will support up to 4) to our penetration panel, where each wire 
- * connected to a pin on a db9 pen-panel RF filter. The microcontroller is 
- * connected to the other side of the filter, and thus outside the scan room.
+ * The firmware will support up to 4). This was run to our penetration panel, 
+ * where each wire connected to a pin on a db9 pen-panel RF filter. The 
+ * microcontroller is connected to the other side of the filter, and thus 
+ * outside the scan room.
  * 
  * See the CNI wiki page for a picture, as well as links to matlab and python 
  * code to read the touch values:
