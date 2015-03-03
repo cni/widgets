@@ -12,8 +12,7 @@
  * More details:
  *
  *   http://www.pjrc.com/store/teensy.html
- *
- * Four-wire resistive touch glass from Keytec:
+21 * Four-wire resistive touch glass from Keytec:
  *
  *   http://www.magictouch.com/KTT-084LAM.html
  * 
@@ -56,7 +55,7 @@
 // mouse movements. If you want it to behave like a simple track-pad that emulates 
 // a mouse, comment-out the line below and change the teensy USB device type from
 // 'serial' to 'keyboard/mouse' (under the Arduino 'tools' menu). 
-#define ABSOLUTE
+//#define ABSOLUTE
 
 // *** WIRING UP THE CONNECTIONS ***
 // We will switch data-direction and digial values often and in time-critical code,
@@ -100,6 +99,8 @@ byte g_doClick = false;
 
 // Milliseconds before we start auto-repeating a keystroke.
 unsigned int g_keyAutoRepeatDelay = 250;
+boolean g_reverse_x = true;
+boolean g_reverse_y = true;
 
 void setup()
 {
@@ -327,6 +328,8 @@ boolean readTouchPad(int* posX, int* posY)
     TOUCH_DDRREG |=  (TOUCH_XPOS);
     TOUCH_PORTREG &= ~(TOUCH_XPOS | TOUCH_XNEG | TOUCH_YPOS);
     TOUCH_PORTREG |=  TOUCH_YNEG;
+    if(g_reverse_x) *posX = -*posX;
+    if(g_reverse_y) *posY = -*posY;
     return(true);
   }else{
     return(false);
