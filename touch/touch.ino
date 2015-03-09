@@ -62,34 +62,57 @@
 // so we'll use direct mapping to the data-direction register (DDR) and the digital
 // value register (PORT).
 // NOTE: if you chane the pins that you use, change these values appropriately!
-#define TOUCH_PORTREG CORE_PIN21_PORTREG
-#define TOUCH_DDRREG  CORE_PIN21_DDRREG
-#define TOUCH_YPOS CORE_PIN18_BITMASK
-#define TOUCH_XNEG CORE_PIN19_BITMASK
-#define TOUCH_YNEG CORE_PIN20_BITMASK
-#define TOUCH_XPOS CORE_PIN21_BITMASK
-#define TOUCH_YNEG_PIN 20
-#define TOUCH_XNEG_PIN 19
-// We'll read the four inputs on port B (pins 0-3)
-#define BUTTON_PINREG CORE_PIN0_PINREG
-static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN2_BITMASK,CORE_PIN3_BITMASK};
-#define BUTTON_1_PIN 0
-#define BUTTON_2_PIN 1
-#define BUTTON_3_PIN 2
-#define BUTTON_4_PIN 3
+#if defined(__AVR_ATmega32U4__)
+  // Teensy2.0
+  #define TOUCH_PORTREG CORE_PIN21_PORTREG
+  #define TOUCH_DDRREG  CORE_PIN21_DDRREG
+  #define TOUCH_YPOS CORE_PIN18_BITMASK
+  #define TOUCH_XNEG CORE_PIN19_BITMASK
+  #define TOUCH_YNEG CORE_PIN20_BITMASK
+  #define TOUCH_XPOS CORE_PIN21_BITMASK
+  #define TOUCH_YNEG_PIN 20
+  #define TOUCH_XNEG_PIN 19
+  // We'll read the four inputs on port B (pins 0-3)
+  #define BUTTON_PINREG CORE_PIN0_PINREG
+  static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN2_BITMASK,CORE_PIN3_BITMASK};
+  #define BUTTON_1_PIN 0
+  #define BUTTON_2_PIN 1
+  #define BUTTON_3_PIN 2
+  #define BUTTON_4_PIN 3
+  // LED will be on when a touch is detected
+  #define LED 11
+#else
+  // Teensy3.1
+  #define byte uint8_t
+  #define TOUCH_PORTREG CORE_PIN5_PORTREG
+  #define TOUCH_DDRREG  CORE_PIN5_DDRREG
+  #define TOUCH_YPOS digitalPinToBitMask(16)
+  #define TOUCH_XNEG digitalPinToBitMask(17)
+  #define TOUCH_YNEG digitalPinToBitMask(18)
+  #define TOUCH_XPOS digitalPinToBitMask(19)
+  #define TOUCH_YNEG_PIN 18
+  #define TOUCH_XNEG_PIN 17
+  // We'll read the four inputs on port B (pins 0-3)
+  #define BUTTON_PINREG CORE_PIN5_PINREG
+  static const byte c_buttonMask[] = {digitalPinToBitMask(5),digitalPinToBitMask(6),digitalPinToBitMask(7),digitalPinToBitMask(8)};
+  #define BUTTON_1_PIN 5
+  #define BUTTON_2_PIN 6
+  #define BUTTON_3_PIN 7
+  #define BUTTON_4_PIN 8
+  // LED will be on when a touch is detected
+  #define LED 13
+#endif
+
 #define BUTTON_DEBOUNCE_TIME 25
 #define BUTTON_LOCK_INPUT_TIME 250
-
-// LED will be on when a touch is detected
-#define LED 11
 
 // The touch readings are buffered, and some values at the beginning and end of a touch
 // epoch are discarded. These must be powers of two, and no more than 8 bits. A larger
 // buffer makes for smoother movements, but reduces responsiveness. The values below
 // worked well for us, with a good balance between smoothness and responsiveness.
-#define BUFF_BITS 5
+#define BUFF_BITS 5 //5
 #define BUFF_SIZE (1<<BUFF_BITS)
-#define KEEP_BITS 4
+#define KEEP_BITS 4 //4
 #define KEEP_SIZE (1<<KEEP_BITS)
 #define DISCARD_SIZE (BUFF_SIZE-KEEP_SIZE)
 
@@ -97,10 +120,16 @@ static const byte c_buttonMask[] = {CORE_PIN0_BITMASK,CORE_PIN1_BITMASK,CORE_PIN
 // So we kept this off and used a separate button for clicking.
 byte g_doClick = false;
 
+// The gain is an integer from 1 to ~30. There's some bit-shifting going on, so gain=8 is actualy unity. gain=12 is an effective gain of 1.5. 
+int gain = 24;
+int g_upper_move_thresh = gain<<3 * 1000;
+
+byte g_accel = false;
+
 // Milliseconds before we start auto-repeating a keystroke.
 unsigned int g_keyAutoRepeatDelay = 250;
-boolean g_reverse_x = true;
-boolean g_reverse_y = true;
+byte g_reverse_x = false;
+byte g_reverse_y = false;
 
 void setup()
 {
@@ -230,12 +259,18 @@ void loop()
       // Now compute the mean using a bit-shift to do integer division:
       meanPosX = sumX>>KEEP_BITS;
       meanPosY = sumY>>KEEP_BITS;
-      int moveX =  (meanPosX-lastPosX);
-      int moveY = -(meanPosY-lastPosY);
-      int accel = isqrt(moveX*moveX + moveY*moveY);
-      if(accel>1){
-        moveX *= accel;
-        moveY *= accel;
+      int moveX =  ((meanPosX-lastPosX) * gain)>>3;
+      int moveY = -((meanPosY-lastPosY) * gain)>>3;
+      if(abs(moveX)>g_upper_move_thresh || abs(moveY)>g_upper_move_thresh){
+        moveX = 0;
+        moveY = 0;
+      }
+      if(g_accel){
+        int accel = isqrt(moveX*moveX + moveY*moveY);
+        if(accel>1){
+          moveX *= accel;
+          moveY *= accel;
+        }
       }
       #ifndef ABSOLUTE
         // Mouse move values range from -127 to +127; +X moves right, +Y moves down.
@@ -299,10 +334,10 @@ byte readButtonState()
 // switching quickly. This routine is called often and it's speed affects the responsiveness
 // of the interface, so we need to be as efficient as possible here.
 // Returns TRUE if touched, and puts the coords in posX and posY.
-boolean readTouchPad(int* posX, int* posY)
+byte readTouchPad(int* posX, int* posY)
 {
   // In standby mode YNEG is pulled up, so we know that we are touched if YNEG goes low.
-  if(analogRead(TOUCH_YNEG_PIN)<500){
+  if(analogRead(TOUCH_YNEG_PIN)<400){ // 500
     // Horizontal read: pull one X high and the other low to create a horizontal voltage
     // gradient, and then read out the voltage from one of the Y pads.
     TOUCH_DDRREG &= ~(TOUCH_YPOS | TOUCH_YNEG); // Set YPOS and YNEG as inputs
