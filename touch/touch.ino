@@ -12,7 +12,7 @@
  * More details:
  *
  *   http://www.pjrc.com/store/teensy.html
-21 * Four-wire resistive touch glass from Keytec:
+ * Four-wire resistive touch glass from Keytec:
  *
  *   http://www.magictouch.com/KTT-084LAM.html
  * 
