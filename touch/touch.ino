@@ -120,9 +120,15 @@
 // So we kept this off and used a separate button for clicking.
 byte g_doClick = false;
 
-// The gain is an integer from 1 to ~30. There's some bit-shifting going on, so gain=8 is actualy unity. gain=12 is an effective gain of 1.5. 
-int gain = 24;
-int g_upper_move_thresh = gain<<3 * 1000;
+// The gain is an integer from 1 to ~30. There's some bit-shifting going on, 
+// so g_gain=8 is actualy unity, g_gain=12 is an effective gain of 1.5, etc. 
+int g_gain = 24;
+int g_upper_move_thresh = g_gain<<3 * 1000;
+
+// The threshold for detecting a touch. This is generally about half the applied potential
+// (in 10-bit ADC units: 512). But we found that a slightly lower value elimated some junk
+// introduced by lightly grazing the touch surface.
+int g_touch_thres = 400;
 
 byte g_accel = false;
 
@@ -259,13 +265,16 @@ void loop()
       // Now compute the mean using a bit-shift to do integer division:
       meanPosX = sumX>>KEEP_BITS;
       meanPosY = sumY>>KEEP_BITS;
-      int moveX =  ((meanPosX-lastPosX) * gain)>>3;
-      int moveY = -((meanPosY-lastPosY) * gain)>>3;
+      // Integer math- g_gain=8 is actually unity gain due to the 3-bit shift to the right here (i.e., /8).
+      int moveX =  ((meanPosX-lastPosX) * g_gain)>>3;
+      int moveY = -((meanPosY-lastPosY) * g_gain)>>3;
       if(abs(moveX)>g_upper_move_thresh || abs(moveY)>g_upper_move_thresh){
+        // Values higher than the threshold are almost always noise junk, so don't count them.
         moveX = 0;
         moveY = 0;
       }
       if(g_accel){
+        // Implement mouse velocity acceleration
         int accel = isqrt(moveX*moveX + moveY*moveY);
         if(accel>1){
           moveX *= accel;
@@ -314,7 +323,7 @@ byte readButtonState()
       // Button i's state has changed, but we won't let it go through
       // unless it remains changed for longer than the debounce time.
       if(pendingStateChange & c_buttonMask[i]){
-        // there was a pending state change for button i; has debounce time expired?
+        // there was a pending state change for button i. Has debounce time expired?
         if(curMillis-bMillis[i]>BUTTON_DEBOUNCE_TIME){
           // debounce time expired, so toggle the state for this button and clear its pending flag.
           curButtonState ^= c_buttonMask[i];
@@ -331,13 +340,13 @@ byte readButtonState()
 }
 
 // Read the 4-wire resistive touchpad. We use direct register access to do the pin-mode
-// switching quickly. This routine is called often and it's speed affects the responsiveness
+// switching quickly. This routine is called often and its speed affects the responsiveness
 // of the interface, so we need to be as efficient as possible here.
 // Returns TRUE if touched, and puts the coords in posX and posY.
 byte readTouchPad(int* posX, int* posY)
 {
   // In standby mode YNEG is pulled up, so we know that we are touched if YNEG goes low.
-  if(analogRead(TOUCH_YNEG_PIN)<400){ // 500
+  if(analogRead(TOUCH_YNEG_PIN)<g_touch_thres){
     // Horizontal read: pull one X high and the other low to create a horizontal voltage
     // gradient, and then read out the voltage from one of the Y pads.
     TOUCH_DDRREG &= ~(TOUCH_YPOS | TOUCH_YNEG); // Set YPOS and YNEG as inputs
