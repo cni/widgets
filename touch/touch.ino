@@ -122,7 +122,7 @@ byte g_doClick = false;
 
 // The gain is an integer from 1 to ~30. There's some bit-shifting going on, 
 // so g_gain=8 is actualy unity, g_gain=12 is an effective gain of 1.5, etc. 
-int g_gain = 24;
+int g_gain = 8;
 int g_upper_move_thresh = g_gain<<3 * 1000;
 
 // The threshold for detecting a touch. This is generally about half the applied potential
@@ -130,7 +130,7 @@ int g_upper_move_thresh = g_gain<<3 * 1000;
 // introduced by lightly grazing the touch surface.
 int g_touch_thres = 400;
 
-byte g_accel = false;
+byte g_accel = true;
 
 // Milliseconds before we start auto-repeating a keystroke.
 unsigned int g_keyAutoRepeatDelay = 250;
@@ -178,16 +178,12 @@ void loop()
   curMillis = millis();
 
   #ifndef ABSOLUTE
-  Mouse.set_buttons(buttonState&c_buttonMask[2], 0, buttonState&c_buttonMask[3]);
+  Mouse.set_buttons(buttonState&c_buttonMask[2] | buttonState&c_buttonMask[1], 0, buttonState&c_buttonMask[3]);
   // To emulate scroll wheel: Mouse.scroll(val): val=[-127,+127] (+ to scroll up, - to scroll down)
   // The other two buttons send keystrokes.
   if(buttonState&c_buttonMask[0] && curMillis-lastKeyPress[0]>g_keyAutoRepeatDelay){
     Keyboard.print('1');
     lastKeyPress[0] = curMillis;
-  }
-  if(buttonState&c_buttonMask[1] && curMillis-lastKeyPress[1]>g_keyAutoRepeatDelay){
-    Keyboard.print('2');
-    lastKeyPress[1] = curMillis;
   }
   #endif
 
