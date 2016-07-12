@@ -27,6 +27,8 @@
  * average deviation from the mean. If you expect deviations higher than this,
  * then you will want to decrease the buffer size or maybe try a larger container
  * for the sum-of-squares.
+ * 
+ * NOTE: The pulse out pin is active low. (I.e., hold high and pull low to pulse.)
  *
  * To Do:
  *  - measure the data packet interval
@@ -59,9 +61,10 @@ ser.close()
 
 */
 
-#include <Flash.h>
 #include <Messenger.h>
 #include <SSD1306.h>
+
+byte g_verbose = 0;
 
 #define VERSION "1.0"
 
@@ -207,31 +210,34 @@ void messageReady() {
     switch(command) {
 
     case '?': // display help text
-      Serial << F("CNI PhysMon: Monitor GE physio data stream on UART Rx pin.\n");
-      Serial << F("Pulse pulses are output on pin ") << (int)PULSE_OUT_PIN << F(".\n");
-      Serial << F("Trigger pulses are output on pin ") << (int)TRIGGER_OUT_PIN << F(".\n");
-      Serial << F("\nCommands:\n");
-      Serial << F("[s,X,N] Set parameter X to value N. (Omit N to echo the current value.)\n");
-      Serial << F("  [s,d,N] Set the display update interval.\n");
-      Serial << F("  [s,n,N] Set the number of consecutive z-scores needed to pulse.\n");
-      Serial << F("  [s,o,N] Set the output pulse duration to N milliseconds.\n");
-      Serial << F("  [s,p] Enable scan timing pulse detection.\n");
-      Serial << F("  [s,r,N] Set the pulse refractory period to N milliseconds.\n");
-      Serial << F("  [s,z,N] Set the z-score threshold, scaled by ") << ZSCALE << F(".\n");
-      Serial << F("[p,F] Set physio output format flag. Valid values:\n");
-      Serial << F("         0 for no physio data\n");
-      Serial << F("         1 for text: tic,resp,ppg,z-score,pulse bit\n");
-      Serial << F("         2 for binary tic(uint16) resp(int16) ppg(int16) z-score(uint8) pulse(uint8)\n");
-      Serial << F("         3 for GE binary format\n");
-      Serial << F("[r]   Reset default state.\n\n");
-      Serial << F("[t]   Send a trigger pulse.\n");
+      Serial.print(F("CNI PhysMon: Monitor GE physio data stream on UART Rx pin.\n"));
+      Serial.print(F("Pulse pulses are output on pin "));
+      Serial.println((int)PULSE_OUT_PIN);
+      Serial.print(F("Trigger pulses are output on pin "));
+      Serial.println((int)TRIGGER_OUT_PIN);
+      Serial.print(F("\nCommands:\n"));
+      Serial.print(F("[s,X,N] Set parameter X to value N. (Omit N to echo the current value.)\n"));
+      Serial.print(F("  [s,d,N] Set the display update interval.\n"));
+      Serial.print(F("  [s,n,N] Set the number of consecutive z-scores needed to pulse.\n"));
+      Serial.print(F("  [s,o,N] Set the output pulse duration to N milliseconds.\n"));
+      Serial.print(F("  [s,p] Enable scan timing pulse detection.\n"));
+      Serial.print(F("  [s,r,N] Set the pulse refractory period to N milliseconds.\n"));
+      Serial.print(F("  [s,z,N] Set the z-score threshold, scaled by "));\
+      Serial.println(ZSCALE);
+      Serial.print(F("[p,F] Set physio output format flag. Valid values:\n"));
+      Serial.print(F("         0 for no physio data\n"));
+      Serial.print(F("         1 for text: tic,resp,ppg,z-score,pulse bit\n"));
+      Serial.print(F("         2 for binary tic(uint16) resp(int16) ppg(int16) z-score(uint8) pulse(uint8)\n"));
+      Serial.print(F("         3 for GE binary format\n"));
+      Serial.print(F("[r]   Reset default state.\n\n"));
+      Serial.print(F("[t]   Send a trigger pulse.\n"));
       break;
 
     case 's': // Set parameter value
       if(g_message.available())
         paramName = g_message.readChar();
       else
-        Serial << F("ERROR: Set parameter requires a parameter name.\n");
+        Serial.print(F("ERROR: Set parameter requires a parameter name.\n"));
       while(g_message.available()) val[i++] = g_message.readInt();
       switch(paramName) {
 
@@ -239,21 +245,26 @@ void messageReady() {
           if(i==1)
             g_displayUpdateInterval = val[0];
           else
-            Serial << F("Display update interval is set to ") << (int)g_displayUpdateInterval << F(" tics.\n");
+            Serial.print(F("Display update interval is set to "));
+            Serial.print((int)g_displayUpdateInterval);
+            Serial.print(F(" tics.\n"));
         break;
 
         case 'n':
           if(i==1)
             g_numConsecutiveZscores = val[0];
           else
-            Serial << F("Num consecutive z-scores is set to ") << (int)g_numConsecutiveZscores << F(".\n");
+            Serial.print(F("Num consecutive z-scores is set to "));
+            Serial.println((int)g_numConsecutiveZscores);
         break;
 
         case 'o': // Set out-pulse duration (msec)
           if(i==1)
             g_outPinDuration = val[0];
           else
-            Serial << F("Output pulse duration is set to ") << g_outPinDuration << F(" msec.\n");
+            Serial.print(F("Output pulse duration is set to "));
+            Serial.print(g_outPinDuration);
+            Serial.print(F(" msec.\n"));
           break;
 
         case 'p': // enable/disable input pulse detection
@@ -261,42 +272,53 @@ void messageReady() {
             if(val[0]==0 || val[0]==1)
               setInTriggerState(val[0]);
             else
-              Serial << F("ERROR: in trigger state = [0|1].");
+              Serial.print(F("ERROR: in trigger state = [0|1]."));
           }else
-            Serial << F("ERROR: Set in trigger state requires one param.\n");
+            Serial.print(F("ERROR: Set in trigger state requires one param.\n"));
         break;
 
         case 'r': // Set pulse refractory period (msec)
           if(i==1)
             g_refractoryTics = val[0]/DATA_INTERVAL_MILLISEC;
           else
-            Serial << F("Pulse refractory period is set to ") << g_refractoryTics*DATA_INTERVAL_MILLISEC
-                   << F(" msec (") << g_refractoryTics << F(" tics).\n");
+            Serial.print(F("Pulse refractory period is set to "));
+            Serial.print(g_refractoryTics*DATA_INTERVAL_MILLISEC);
+            Serial.print(F(" msec ("));
+            Serial.print(g_refractoryTics);
+            Serial.print(F(" tics).\n"));
           break;
 
         case 'z': // Set z-score threshold
           if(i==1)
             g_thresh = val[0];
           else
-            Serial << F("Z-score threshold is set to ") << g_thresh << F(". (ZSCALE is ") << ZSCALE << F(")\n");
+            Serial.print(F("Z-score threshold is set to "));
+            Serial.print(g_thresh);
+            Serial.print(F(". (ZSCALE is "));
+            Serial.print(ZSCALE);
+            Serial.print(F(")\n"));
         break;
 
         default:
-          Serial << F("ERROR: Unknown parameter name '") << paramName << F("'.\n\n");
+          Serial.print(F("ERROR: Unknown parameter name '"));
+          Serial.print(paramName);
+          Serial.print(F("'.\n\n"));
         } // end switch paramName
       break;
 
     case 'p': // enable/disable physio output
       while(g_message.available()) val[i++] = g_message.readInt();
       if(i>1){
-        Serial << F("ERROR: Set physio output state requires no more than one param.\n");
+        Serial.print(F("ERROR: Set physio output state requires no more than one param.\n"));
       }else if(i==1){
         if(val[0]<0||val[0]>3)
-          Serial << F("ERROR: Physio output state = [0|1|2|3].\n");
+          Serial.print(F("ERROR: Physio output state = [0|1|2|3].\n"));
         else
           g_physioOutFlag = val[0];
       }else{
-        Serial << F("Physio state is set to ") << (int)g_physioOutFlag << F(".\n");
+        Serial.print(F("Physio state is set to "));
+        Serial.print((int)g_physioOutFlag);
+        Serial.print(F(".\n"));
       }
       break;
 
@@ -318,7 +340,9 @@ void messageReady() {
       break;
 
     default:
-      Serial << F("ERROR: Unknown command '") << command << F("'.\n\n");
+      Serial.print(F("ERROR: Unknown command '"));
+      Serial.print(command);
+      Serial.print(F("'.\n\n"));
     } // end switch command
   } // end while
 }
@@ -335,7 +359,7 @@ void setup(){
 
   // initialize output pins.
   pinMode(PULSE_OUT_PIN, OUTPUT);
-  digitalWrite(PULSE_OUT_PIN, LOW);
+  digitalWrite(PULSE_OUT_PIN, HIGH);
   pinMode(TRIGGER_OUT_PIN, OUTPUT);
   digitalWrite(TRIGGER_OUT_PIN, LOW);
 
@@ -364,16 +388,21 @@ void setup(){
   g_Uart.begin(115200);
 
   Serial.begin(115200);
-  Serial << F("*********************************************************\n");
-  Serial << F("* CNI Physmon version ") << VERSION << F("\n");
-  Serial << F("* Copyright 2011 Bob Dougherty <bobd@stanford.edu>\n");
-  Serial << F("* http://cniweb.stanford.edu/wiki/CNI_widgets\n");
-  Serial << F("*********************************************************\n\n");
-  Serial << F("Initialized with ") << BUFF_SIZE << F(" element buffers. (") << freeRam() << F(" SRAM bytes free).\n\n");
+  Serial.print(F("*********************************************************\n"));
+  Serial.print(F("* CNI Physmon version "));
+  Serial.println(VERSION);
+  Serial.print(F("* Copyright 2011 Bob Dougherty <bobd@stanford.edu>\n"));
+  Serial.print(F("* http://cniweb.stanford.edu/wiki/CNI_widgets\n"));
+  Serial.print(F("*********************************************************\n\n"));
+  Serial.print(F("Initialized with "));
+  Serial.print(BUFF_SIZE);
+  Serial.print(F(" element buffers. ("));
+  Serial.print(freeRam());
+  Serial.print(F(" SRAM bytes free).\n\n"));
 
   // Attach the callback function to the Messenger
   g_message.attach(messageReady);
-  Serial << F("CNI PhysMon Ready. Send the ? command ([?]) for help.\n\n");
+  Serial.print(F("CNI PhysMon Ready. Send the ? command ([?]) for help.\n\n"));
   analogWrite(LED_RED_PIN, 0);
   analogWrite(LED_GRN_PIN, 0);
   analogWrite(LED_BLU_PIN, 0);
@@ -396,6 +425,7 @@ void loop(){
     // This means that we had to resync. We don't process anything, just show status.
     snprintf(stringBuffer,SSD1306_LCDLINEWIDTH+1,"* resyncing packets...");
     refreshDisplay(0, stringBuffer, 255, 0);
+    if(g_verbose) Serial.print(F("Filling cache...\n"));
   }else if(ticDiff>0){
     // Got something, now process it.
     unsigned int pulseIntervalTics = g_data.tic - g_lastPulseTic;
@@ -406,6 +436,7 @@ void loop(){
     boolean pulseNow = false;
     if((curNumZscores>g_numConsecutiveZscores)){
       // PULSE DETECTED!
+      if(g_verbose) Serial.print(F("Pulsing\n"));
       bpm = pulseOut(pulseIntervalTics);
       snprintf(stringBuffer, SSD1306_LCDLINEWIDTH+1, "%d z*%d=%02d bpm=%03d     ",ticDiff,ZSCALE,zscore,bpm);
       curNumZscores = 0;
@@ -414,14 +445,22 @@ void loop(){
 
     if(g_physioOutFlag==1){
       // 1 for text: tic,resp,ppg,z-score,pulse bit
-      Serial << g_data.tic << F(",") << g_data.resp << F(",") << g_data.ppg << F(",")
-             << zscore << F(",") << (int)pulseNow << F("\n");
+      Serial.print(g_data.tic);
+      Serial.print(F(","));
+      Serial.print(g_data.resp);
+      Serial.print(F(","));
+      Serial.print(g_data.ppg);
+      Serial.print(F(","));
+      Serial.print(zscore);
+      Serial.print(F(","));
+      Serial.print((int)pulseNow);
+      Serial.print(F("\n"));
     }else if(g_physioOutFlag==2){
       // 2 for binary tic(uint16) resp(int16) ppg(int16) z-score(uint8) pulse(uint8)
       // *** IMPLEMENT ME ***
     }else if(g_physioOutFlag==3){
       // 3 for GE binary format (just echo the byte array)
-      Serial << (char *)g_data.byteArray;
+      Serial.print((char *)g_data.byteArray);
     }
     refreshDisplay(zscore, stringBuffer, ticDiff, pulseNow);
   }
@@ -444,8 +483,10 @@ byte getDataPacket(){
 
   // If we don't have our bytes, we return immediately.
   if(g_Uart.available()<12){
+    if(g_verbose) Serial.print(F("Get: no data\n"));
     ticDiff = 0;
   }else{
+    if(g_verbose) Serial.print(F("Getting data...\n"));
     // Read the 12 bytes
     for(byte i=0; i<12; i++)
       g_data.byteArray[i] = g_Uart.read();
@@ -474,15 +515,22 @@ byte getDataPacket(){
 // Note that this function will block until it hits a silent period in the serial stream.
 void resync(){
   // Wait for the next silent period:
+  int numTries;
+  if(g_verbose) Serial.print(F("Resyncing...\n"));
   do{
     g_Uart.flush();
     delay(DATA_SILENCE_MILLISEC);
-  }while(g_Uart.available()>0);
+  }while(g_Uart.available()>0 && numTries<1000);
+  if(g_verbose){
+    if(numTries==3000) Serial.print(F("Resync timed out!.\n"));
+    else Serial.print(F("Resynced.\n"));
+  }
 }
 
 // Process the current data packet. This involves loading up the buffers and
 // computing the z-score for the current data point.
 int processDataPacket(){
+  if(g_verbose) Serial.print(F("Processing...\n"));
   int curDataVal = g_data.ppg;
   // Remove the oldest value from the sum:
   g_dataSum -= g_dataBuffer[g_curBuffIndex];
@@ -506,6 +554,7 @@ int processDataPacket(){
   g_curBuffIndex++;
   if(g_curBuffIndex==BUFF_SIZE)
     g_curBuffIndex = 0;
+  if(g_verbose) Serial.print(F("Processed.\n"));
   return(zscore);
 }
 
@@ -514,8 +563,8 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
   // We need to keep track of the current x,y data value. 0,0 is at the
   // upper left, so we want to flip Y and thus initialize by the height,
   // which is the bottom of the display.
-  static byte curX;
-  static byte curY = SSD1306_LCDHEIGHT;
+  static uint8_t curX;
+  static uint8_t curY = SSD1306_LCDHEIGHT;
   // The current data frame. Used to know when we are due for a display refresh.
   static byte curRefreshFrame;
 
@@ -533,7 +582,9 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
     if(curY>SSD1306_LCDHEIGHT-1) curY = SSD1306_LCDHEIGHT-1;
     else if(curY<16) curY = 16;
     // Plot the pixel for the current data point
-    oled.setpixel(curX, curY, WHITE);
+    // *** WTF? Get undefined reference to `SSD1306::setpixel(unsigned char, unsigned char, unsigned char)' error?!?!
+    //oled.setpixel(curX, curY, WHITE);
+    oled.fillcircle(curX, curY, 1, WHITE);
     // Update the blue LED
     analogWrite(LED_BLU_PIN, curY<SSD1306_LCDHEIGHT ? (SSD1306_LCDHEIGHT-1-curY)*2 : 0);
     // Reset the y-position accumulator:
@@ -570,9 +621,9 @@ void updateOutPins(){
   if(g_pulsePinOn){
     // Detect and correct counter wrap-around:
     if(curMillis<g_pulseOutStart) g_pulseOutStart += 4294967295UL;
-    // Pull it low if the duration has passed
+    // Pull back to high if the duration has passed
     if(curMillis-g_pulseOutStart > g_outPinDuration){
-      digitalWrite(PULSE_OUT_PIN, LOW);
+      digitalWrite(PULSE_OUT_PIN, HIGH);
       analogWrite(LED_GRN_PIN, 0);
     }
   }
@@ -586,7 +637,7 @@ void triggerOut(){
 }
 
 byte pulseOut(unsigned int pulseIntervalTics){
-  digitalWrite(PULSE_OUT_PIN, HIGH);
+  digitalWrite(PULSE_OUT_PIN, LOW);
   analogWrite(LED_GRN_PIN, 80);
   g_pulsePinOn = true;
   g_pulseOutStart = millis();
@@ -613,7 +664,7 @@ void triggerIn(){
   // *** WORK HERE ***
   // Do we want to just spit out chars with each pulse, or somehow incorporate this info in the
   // physio data str
-  Serial << F("p");
+  Serial.print(F("p"));
 }
 
 
