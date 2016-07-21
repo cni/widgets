@@ -82,6 +82,11 @@ byte g_verbose = 0;
 #define BPM_SCALE (60000/DATA_INTERVAL_MILLISEC)
 // The minimal silent period that we will use to detect the start of a new packet:
 #define DATA_SILENCE_MILLISEC 1
+// Number of times we try to resync. Each try involves waiting DATA_SILENCE_MILLISEC, so
+// this should never take more than about 5 tries given the 4.2 ms of silence expected.
+// Setting this value too high will lock up the core and cause problems with the other
+// functions, like triggering.
+#define MAX_SYNC_TRIES 7
 
 #define DEFAULT_OUT_PULSE_MSEC 5
 #define DEFAULT_PHYSIO_OUT_STATE 0
@@ -187,6 +192,8 @@ unsigned int g_outPinDuration = DEFAULT_OUT_PULSE_MSEC;
 byte g_physioOutFlag = DEFAULT_PHYSIO_OUT_STATE;
 byte g_inPulseEdge = DEFAULT_IN_EDGE;
 
+volatile byte g_inTriggerSerial = false;
+
 // Flags to remember if the output pins are currently turned on
 byte g_triggerPinOn, g_pulsePinOn;
 // We also need to remember when they were turned on
@@ -220,15 +227,15 @@ void messageReady() {
       Serial.print(F("  [s,d,N] Set the display update interval.\n"));
       Serial.print(F("  [s,n,N] Set the number of consecutive z-scores needed to pulse.\n"));
       Serial.print(F("  [s,o,N] Set the output pulse duration to N milliseconds.\n"));
-      Serial.print(F("  [s,p] Enable scan timing pulse detection.\n"));
-      Serial.print(F("  [s,r,N] Set the pulse refractory period to N milliseconds.\n"));
-      Serial.print(F("  [s,z,N] Set the z-score threshold, scaled by "));\
-      Serial.println(ZSCALE);
-      Serial.print(F("[p,F] Set physio output format flag. Valid values:\n"));
+      Serial.print(F("  [s,p,N] Set physio output format flag. Valid values:\n"));
       Serial.print(F("         0 for no physio data\n"));
       Serial.print(F("         1 for text: tic,resp,ppg,z-score,pulse bit\n"));
       Serial.print(F("         2 for binary tic(uint16) resp(int16) ppg(int16) z-score(uint8) pulse(uint8)\n"));
       Serial.print(F("         3 for GE binary format\n"));
+      Serial.print(F("  [s,r,N] Set the pulse refractory period to N milliseconds.\n"));
+      Serial.print(F("  [s,z,N] Set the z-score threshold, scaled by "));\
+      Serial.println(ZSCALE);
+      Serial.print(F("[p]   Enable scan timing pulse detection.\n"));
       Serial.print(F("[r]   Reset default state.\n\n"));
       Serial.print(F("[t]   Send a trigger pulse.\n"));
       break;
@@ -267,14 +274,17 @@ void messageReady() {
             Serial.print(F(" msec.\n"));
           break;
 
-        case 'p': // enable/disable input pulse detection
+        case 'p': // set physio output mode
           if(i==1){
-            if(val[0]==0 || val[0]==1)
-              setInTriggerState(val[0]);
+            if(val[0]>=0 && val[0]<=3)
+              g_physioOutFlag = val[0];
             else
-              Serial.print(F("ERROR: in trigger state = [0|1]."));
-          }else
-            Serial.print(F("ERROR: Set in trigger state requires one param.\n"));
+              Serial.print(F("ERROR: physio out mode = [0|1|2|3]."));
+          }else{
+              Serial.print(F("Physio state is set to "));
+              Serial.print((int)g_physioOutFlag);
+              Serial.print(F(".\n"));
+          }
         break;
 
         case 'r': // Set pulse refractory period (msec)
@@ -306,20 +316,9 @@ void messageReady() {
         } // end switch paramName
       break;
 
-    case 'p': // enable/disable physio output
-      while(g_message.available()) val[i++] = g_message.readInt();
-      if(i>1){
-        Serial.print(F("ERROR: Set physio output state requires no more than one param.\n"));
-      }else if(i==1){
-        if(val[0]<0||val[0]>3)
-          Serial.print(F("ERROR: Physio output state = [0|1|2|3].\n"));
-        else
-          g_physioOutFlag = val[0];
-      }else{
-        Serial.print(F("Physio state is set to "));
-        Serial.print((int)g_physioOutFlag);
-        Serial.print(F(".\n"));
-      }
+    case 'p': // enable/disable input pulse detection
+      g_inTriggerSerial = true;
+      //Serial.print(F("Enabling input pulses\n"));
       break;
 
     case 'r': // reset
@@ -330,6 +329,7 @@ void messageReady() {
       g_refractoryTics = DEFAULT_REFRACTORY_TICS;
       g_displayUpdateInterval = DEFAULT_REFRESH_INTERVAL;
       digitalWrite(TRIGGER_OUT_PIN, LOW);
+      g_inTriggerSerial = false;
       break;
 
     case 't': // force output trigger
@@ -337,6 +337,7 @@ void messageReady() {
       // we get a change on the pin no matter what state we were in.
       if(g_triggerPinOn) digitalWrite(TRIGGER_OUT_PIN, LOW);
       triggerOut();
+      g_inTriggerSerial = true;
       break;
 
     default:
@@ -366,7 +367,7 @@ void setup(){
   // Initialize input pin
   // This probably isn't necessary- external interrupts work even in OUTPUT mode.
   pinMode(TRIGGER_IN_PIN, INPUT);
-  setInTriggerState(DEFAULT_IN_STATE);
+  setInTriggerState(1);
 
   // Initialize the OLED display
   // Configure it to generate the high voltage from 3.3v
@@ -497,8 +498,7 @@ byte getDataPacket(){
       // To avoid getting stuck after a resync, we only check ticDiff for a valid increment if
       // the previous cycle was NOT a resync.
       ticDiff = 255;
-      resync();
-      resynced = true;
+      resynced = resync();
     }else{
       resynced = false;
     }
@@ -513,18 +513,25 @@ byte getDataPacket(){
 // flush to clear input buffer
 // loop, timing the interval between bytes until it exceeds the threshold.
 // Note that this function will block until it hits a silent period in the serial stream.
-void resync(){
+boolean resync(){
   // Wait for the next silent period:
   int numTries;
   if(g_verbose) Serial.print(F("Resyncing...\n"));
   do{
     g_Uart.flush();
     delay(DATA_SILENCE_MILLISEC);
-  }while(g_Uart.available()>0 && numTries<1000);
+    numTries++;
+  }while(g_Uart.available()>0 && numTries<MAX_SYNC_TRIES);
   if(g_verbose){
-    if(numTries==3000) Serial.print(F("Resync timed out!.\n"));
-    else Serial.print(F("Resynced.\n"));
+    if(numTries==MAX_SYNC_TRIES)
+      Serial.print(F("Resync timed out!.\n"));
+    else
+      Serial.print(F("Resynced.\n"));
   }
+  if(numTries<MAX_SYNC_TRIES)
+    return(true);
+  else
+    return(false);
 }
 
 // Process the current data packet. This involves loading up the buffers and
@@ -664,7 +671,8 @@ void triggerIn(){
   // *** WORK HERE ***
   // Do we want to just spit out chars with each pulse, or somehow incorporate this info in the
   // physio data str
-  Serial.print(F("p"));
+  if(g_inTriggerSerial)
+    Serial.print(F("p"));
 }
 
 

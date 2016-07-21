@@ -61,18 +61,16 @@ class _FLASH_STRING : public _Printable
 public:
   _FLASH_STRING(const prog_char *arr);
 
-  size_t length() const
+  size_t length() const 
   { return strlen_P(_arr); }
 
-  void *copy(char *to, size_t size = -1, size_t offset = 0) const
-  {
-    if (size == -1) strcpy_P(to, _arr + offset);
-    else strncpy_P(to, _arr + offset, size);
-    //return size == -1 ?
-    //  strcpy_P(to, _arr + offset) : strncpy_P(to, _arr + offset, size);
+  char *copy(char *to, size_t size = -1, size_t offset = 0) const 
+  { 
+    return size == -1 ?
+      strcpy_P(to, _arr + offset) : strncpy_P(to, _arr + offset, size);
   }
 
-  const prog_char *access() const
+  const prog_char *access() const 
   { return _arr; }
 
   const _Printable &Printable() const
@@ -97,10 +95,10 @@ public:
   _FLASH_ARRAY(const _DataType *arr, size_t count) : _arr(arr), _size(count)
   { }
 
-  size_t count() const
+  size_t count() const 
   { return _size; }
 
-  const _DataType *access() const
+  const _DataType *access() const 
   { return _arr; }
 
   T operator[](int index) const
@@ -120,7 +118,7 @@ public:
     for (size_t i=0; i<_size; ++i)
     {
       stream.print((*this)[i]);
-      if (i < _size - 1)
+      if (i < _size - 1) 
         stream.print(",");
     }
   }
@@ -140,13 +138,13 @@ public:
   _FLASH_TABLE(const _DataType *arr, size_t rows, size_t cols) : _arr(arr), _rows(rows), _cols(cols)
   { }
 
-  size_t rows() const
+  size_t rows() const 
   { return _rows; }
 
-  size_t cols() const
+  size_t cols() const 
   { return _cols; }
 
-  const _DataType *access()
+  const _DataType *access() 
   { return _arr; }
 
   _FLASH_ARRAY<T> operator[](int index) const
@@ -177,7 +175,7 @@ public:
   _FLASH_STRING_ARRAY(const prog_char **arr, size_t count) : _arr(arr), _size(count)
   { }
 
-  size_t count() const
+  size_t count() const 
   { return _size; }
 
   _FLASH_STRING operator[](int index) const
@@ -201,26 +199,26 @@ private:
 #ifndef ARDUINO_STREAMING
 #define ARDUINO_STREAMING
 
-template<class T>
-inline Print &operator <<(Print &stream, T arg)
+template<class T> 
+inline Print &operator <<(Print &stream, T arg) 
 { stream.print(arg); return stream; }
 
 #endif
 
-inline Print &operator <<(Print &stream, const _Printable &printable)
+inline Print &operator <<(Print &stream, const _Printable &printable) 
 { printable.print(stream); return stream; }
 
-inline Print &operator <<(Print &stream, const _FLASH_STRING &printable)
+inline Print &operator <<(Print &stream, const _FLASH_STRING &printable) 
 { printable.print(stream); return stream; }
 
-template<class T>
-inline Print &operator <<(Print &stream, const _FLASH_ARRAY<T> &printable)
+template<class T> 
+inline Print &operator <<(Print &stream, const _FLASH_ARRAY<T> &printable) 
 { printable.print(stream); return stream; }
 
-template<class T>
-inline Print &operator <<(Print &stream, const _FLASH_TABLE<T> &printable)
+template<class T> 
+inline Print &operator <<(Print &stream, const _FLASH_TABLE<T> &printable) 
 { printable.print(stream); return stream; }
 
-inline Print &operator <<(Print &stream, const _FLASH_STRING_ARRAY &printable)
+inline Print &operator <<(Print &stream, const _FLASH_STRING_ARRAY &printable) 
 { printable.print(stream); return stream; }
 
