@@ -61,8 +61,13 @@ ser.close()
 
 */
 
+//#include <Streaming.h>
 #include <Messenger.h>
-#include <SSD1306.h>
+// The following are needed by the OLED libs.
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
 
 byte g_verbose = 0;
 
@@ -101,61 +106,32 @@ byte g_verbose = 0;
 // also want them to be a power of two so that we can use bit-shifting for division.
 // If the update rate is 5ms, then 256 samples will give us a temporal window
 // of ~1.3 sec, 512 = 2.6 sec, and 1024 just over 5 sec.
-#if defined(__AVR_AT90USB1286__)
-  // the teensy 2.0++ (1286) has 8092 bytes of SRAM
-  #define BUFF_SIZE_BITS 10
-  // Teensy2.0++ has LED on D6
-  #define PULSE_OUT_PIN 4
-  #define TRIGGER_OUT_PIN 5
-  #define TRIGGER_IN_PIN 18  // INT6 (pin E6)
-  #define TRIGGER_IN_INT 6
-  #define LED_RED_PIN 1
-  #define LED_GRN_PIN 0
-  #define LED_BLU_PIN 27
-  // uart rx is D2, tx is D3
-  // Pin definitions for the OLED graphical display
-  #define OLED_DC 24
-  #define OLED_RESET 25
-  #define OLED_SS 20
-  #define OLED_CLK 21
-  #define OLED_MOSI 22
-#elif defined(__AVR_ATmega32U4__)
-  // teensy 2.0 (mega32) has 2560 bytes of SRAM. Enough for 2048 in buffers.
-  #define BUFF_SIZE_BITS 9
-  // Teensy2.0 has LED on pin 11
-  #define PULSE_OUT_PIN 11
-  #define TRIGGER_OUT_PIN 10
-  #define TRIGGER_IN_PIN ?
-  #define TRIGGER_IN_INT ?
-  #define LED_RED_PIN 12
-  #define LED_GRN_PIN 14
-  #define LED_BLU_PIN 15
-  // uart rx is D2, tx is D3
-  // Pin definitions for the OLED graphical display
-  #define OLED_DC 11
-  #define OLED_RESET 13
-  #define OLED_SS 0
-  #define OLED_CLK 1
-  #define OLED_MOSI 2
-#else
-  #define BUFF_SIZE_BITS 8
-  #define PULSE_OUT_PIN 13
-  #define TRIGGER_OUT_PIN 14
-  #define TRIGGER_IN_PIN ?
-  #define TRIGGER_IN_INT ?
-  #define LED_RED_PIN 5
-  #define LED_GRN_PIN 6
-  #define LED_BLU_PIN 7
-  // Pin definitions for the OLED graphical display
-  #define OLED_DC 11
-  #define OLED_RESET 13
-  #define OLED_SS 12
-  #define OLED_CLK 10
-  #define OLED_MOSI 9
-#endif
+
+#define BUFF_SIZE_BITS 10
+// Teensy2.0++ has LED on D6
+#define PULSE_OUT_PIN 15
+#define TRIGGER_OUT_PIN 16
+#define TRIGGER_IN_INT 17
+#define TRIGGER_IN_PIN 18  // INT6 (pin E6)
+#define LED_RED_PIN 5
+#define LED_GRN_PIN 4
+#define LED_BLU_PIN 3
+// uart rx is D2, tx is D3
+// Pin definitions for the OLED graphical display
+// dat to pin 11
+// clk to pin 13
+// dc to pin 8
+// rs to pin 7
+// cs to gnd
+const byte OLED_DC_PIN = 6;
+const byte OLED_CS_PIN = 7;
+const byte OLED_RS_PIN = 8;
+const byte SSD1306_LCDLINEWIDTH = 20;
+
 #define BUFF_SIZE (1<<BUFF_SIZE_BITS)
 
-SSD1306 oled(OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_SS);
+Adafruit_SSD1306 oled(OLED_DC_PIN, OLED_RS_PIN, OLED_CS_PIN);
+
 
 // GE Physio data come in as 6 int16s in little endian format.
 // We use a union so we can load each byte and then access the
@@ -348,8 +324,21 @@ void messageReady() {
   } // end while
 }
 
-
 void setup(){
+  Serial.begin(115200);
+  
+  // Initialize the OLED display
+  // Configure it to generate the high voltage from 3.3v
+  oled.begin(SSD1306_SWITCHCAPVCC);
+  oled.display(); // show splashscreen
+  delay(500);
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+  oled.clearDisplay();   // clears the screen and buffer
+  oled.setCursor(0,0);
+  oled.println("Physmon booting...");
+  oled.display();
+  
   // TO DO: load these from eeprom
   g_thresh = DEFAULT_ZSCALE;
   g_numConsecutiveZscores = DEFAULT_NUM_CONSEC_Z;
@@ -357,7 +346,8 @@ void setup(){
   g_displayUpdateInterval = DEFAULT_REFRESH_INTERVAL;
 
   g_curBuffIndex = 0;
-
+  
+  oled.println("Initializing pins..."); oled.display();
   // initialize output pins.
   pinMode(PULSE_OUT_PIN, OUTPUT);
   digitalWrite(PULSE_OUT_PIN, HIGH);
@@ -368,11 +358,7 @@ void setup(){
   // This probably isn't necessary- external interrupts work even in OUTPUT mode.
   pinMode(TRIGGER_IN_PIN, INPUT);
   setInTriggerState(1);
-
-  // Initialize the OLED display
-  // Configure it to generate the high voltage from 3.3v
-  oled.ssd1306_init(SSD1306_SWITCHCAPVCC);
-  oled.display(); // show splashscreen
+  
   for(byte i=0; i<255; i++){
     analogWrite(LED_RED_PIN, i);
     analogWrite(LED_GRN_PIN, i);
@@ -386,9 +372,13 @@ void setup(){
     delay(2);
   }
 
+  oled.println("Starting UART..."); oled.display();
   g_Uart.begin(115200);
 
-  Serial.begin(115200);
+  // Attach the callback function to the Messenger
+  oled.println("Starting messager..."); oled.display();
+  g_message.attach(messageReady);
+  
   Serial.print(F("*********************************************************\n"));
   Serial.print(F("* CNI Physmon version "));
   Serial.println(VERSION);
@@ -397,16 +387,14 @@ void setup(){
   Serial.print(F("*********************************************************\n\n"));
   Serial.print(F("Initialized with "));
   Serial.print(BUFF_SIZE);
-  Serial.print(F(" element buffers. ("));
-  Serial.print(freeRam());
-  Serial.print(F(" SRAM bytes free).\n\n"));
-
-  // Attach the callback function to the Messenger
-  g_message.attach(messageReady);
+  Serial.print(F(" element buffers.\n"));
   Serial.print(F("CNI PhysMon Ready. Send the ? command ([?]) for help.\n\n"));
+  
   analogWrite(LED_RED_PIN, 0);
   analogWrite(LED_GRN_PIN, 0);
   analogWrite(LED_BLU_PIN, 0);
+  
+  oled.println("Staring loop..."); oled.display();
 }
 
 void loop(){
@@ -580,18 +568,18 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
   // CurY will contain an average z-score across the g_displayUpdateInterval number of frames.
   curY -= zscore/g_displayUpdateInterval;
   if(pulseOut)
-    oled.drawline(curX, 10, curX, 14, WHITE);
+    oled.drawLine(curX, 10, curX, 14, WHITE);
   if(curRefreshFrame>g_displayUpdateInterval){
     // Update the running plot
     // Clear the graph just in front of the current x position:
-    oled.fillrect(curX+1, 8, 16, SSD1306_LCDHEIGHT-8, BLACK);
+    oled.fillRect(curX+1, 8, 16, SSD1306_LCDHEIGHT-8, BLACK);
     // Clip the y-values to the plot area (SSD1306_LCDHEIGHT-1 at the bottom to 16 at the top)
     if(curY>SSD1306_LCDHEIGHT-1) curY = SSD1306_LCDHEIGHT-1;
     else if(curY<16) curY = 16;
     // Plot the pixel for the current data point
     // *** WTF? Get undefined reference to `SSD1306::setpixel(unsigned char, unsigned char, unsigned char)' error?!?!
     //oled.setpixel(curX, curY, WHITE);
-    oled.fillcircle(curX, curY, 1, WHITE);
+    oled.fillCircle(curX, curY, 1, WHITE);
     // Update the blue LED
     analogWrite(LED_BLU_PIN, curY<SSD1306_LCDHEIGHT ? (SSD1306_LCDHEIGHT-1-curY)*2 : 0);
     // Reset the y-position accumulator:
@@ -601,10 +589,11 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
     if(curX>=SSD1306_LCDWIDTH){
       curX = 0;
       // If we have wrapped around, we need to clear the first row.
-      oled.drawrect(0, 8, 1, SSD1306_LCDHEIGHT-8, BLACK);
+      oled.drawRect(0, 8, 1, SSD1306_LCDHEIGHT-8, BLACK);
     }
     // Draw the status string at the top:
-    oled.drawstring(0, 0, stringBuffer);
+    oled.setCursor(0,0);
+    oled.println(stringBuffer);
     // Finished drawing the the buffer; copy it to the device:
     oled.display();
     curRefreshFrame = 0;
@@ -676,7 +665,6 @@ void triggerIn(){
 }
 
 
-
 /*
  * Integer square-root approximation, by Jim Ulery.
  * from http://www.azillionmonkeys.com/qed/sqroot.html
@@ -692,20 +680,4 @@ unsigned int isqrt(unsigned long val) {
   return g;
 }
 
-
-extern unsigned int __data_start;
-extern unsigned int __data_end;
-extern unsigned int __bss_start;
-extern unsigned int __bss_end;
-extern unsigned int __heap_start;
-extern void *__brkval;
-
-unsigned int freeRam(){
-  int free_memory;
-  if((int)__brkval == 0)
-     free_memory = ((int)&free_memory) - ((int)&__bss_end);
-  else
-    free_memory = ((int)&free_memory) - ((int)__brkval);
-  return free_memory;
-}
 
