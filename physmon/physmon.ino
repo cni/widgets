@@ -28,7 +28,9 @@
  * then you will want to decrease the buffer size or maybe try a larger container
  * for the sum-of-squares.
  * 
- * NOTE: The pulse out pin is active low. (I.e., hold high and pull low to pulse.)
+ * NOTES: * The pulse out pin is active low. (I.e., hold high and pull low to pulse.)
+ *        * For Teensy3.1, use 48MHz for accurate serial port timing
+ * 
  *
  * To Do:
  *  - measure the data packet interval
@@ -68,6 +70,7 @@ ser.close()
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
+#include "cni_logo.h"
 
 byte g_verbose = 0;
 
@@ -91,7 +94,7 @@ byte g_verbose = 0;
 // this should never take more than about 5 tries given the 4.2 ms of silence expected.
 // Setting this value too high will lock up the core and cause problems with the other
 // functions, like triggering.
-#define MAX_SYNC_TRIES 7
+#define MAX_SYNC_TRIES 5
 
 #define DEFAULT_OUT_PULSE_MSEC 5
 #define DEFAULT_PHYSIO_OUT_STATE 0
@@ -128,6 +131,10 @@ const byte OLED_CS_PIN = 7;
 const byte OLED_RS_PIN = 8;
 const byte SSD1306_LCDLINEWIDTH = 20;
 
+// Object to access the hardware serial port.
+// On Teensy3, Serial1 uses pin 0 for Rx and pin 1 for Tx
+#define g_Uart Serial1
+
 #define BUFF_SIZE (1<<BUFF_SIZE_BITS)
 
 Adafruit_SSD1306 oled(OLED_DC_PIN, OLED_RS_PIN, OLED_CS_PIN);
@@ -139,12 +146,12 @@ Adafruit_SSD1306 oled(OLED_DC_PIN, OLED_RS_PIN, OLED_CS_PIN);
 typedef union dataPacket{
   byte byteArray[12];
   struct{
-    unsigned int tic;
-    int ecg1;
-    int ecg2;
-    int resp;
-    int ppg;
-    int unknown;
+    uint16_t tic;
+    int16_t ecg1;
+    int16_t ecg2;
+    int16_t resp;
+    int16_t ppg;
+    int16_t unknown;
   };
 }dataPacket;
 
@@ -174,9 +181,6 @@ volatile byte g_inTriggerSerial = false;
 byte g_triggerPinOn, g_pulsePinOn;
 // We also need to remember when they were turned on
 unsigned long g_triggerOutStart, g_pulseOutStart;
-
-// Object to access the hardware serial port:
-HardwareSerial g_Uart = HardwareSerial();
 
 // Instantiate Messenger object used for serial port communication.
 Messenger g_message = Messenger(',','[',']');
@@ -330,11 +334,13 @@ void setup(){
   // Initialize the OLED display
   // Configure it to generate the high voltage from 3.3v
   oled.begin(SSD1306_SWITCHCAPVCC);
+  oled.clearDisplay();
+  oled.drawBitmap(0,0,  cni_logo, 128, 64, 1);
   oled.display(); // show splashscreen
   delay(500);
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
-  oled.clearDisplay();   // clears the screen and buffer
+  oled.clearDisplay();
   oled.setCursor(0,0);
   oled.println("Physmon booting...");
   oled.display();
@@ -472,14 +478,25 @@ byte getDataPacket(){
 
   // If we don't have our bytes, we return immediately.
   if(g_Uart.available()<12){
-    if(g_verbose) Serial.print(F("Get: no data\n"));
+    //if(g_verbose) Serial.print(F("Get: no data\n"));
     ticDiff = 0;
   }else{
     if(g_verbose) Serial.print(F("Getting data...\n"));
     // Read the 12 bytes
     for(byte i=0; i<12; i++)
       g_data.byteArray[i] = g_Uart.read();
-
+      
+    if(g_verbose){
+      Serial.print(F("Received: "));
+      Serial.print(g_data.tic); Serial.print(F(", "));
+      Serial.print(g_data.ecg1); Serial.print(F(", "));
+      Serial.print(g_data.ecg2); Serial.print(F(", "));
+      Serial.print(g_data.resp); Serial.print(F(", "));
+      Serial.print(g_data.ppg); Serial.print(F(", "));
+      Serial.print(g_data.unknown); Serial.print(F(","));
+      Serial.print(F("\n"));
+    }
+    
     // Check for valid data by comparing current tic to last tic (should increment by 1).
     ticDiff = g_data.tic - prevTic;
     if((ticDiff<1 || ticDiff>2) && !resynced){
@@ -593,10 +610,13 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
     }
     // Draw the status string at the top:
     oled.setCursor(0,0);
-    oled.println(stringBuffer);
+    oled.print("                     ");
+    oled.setCursor(0,0);
+    oled.print(stringBuffer);
     // Finished drawing the the buffer; copy it to the device:
     oled.display();
     curRefreshFrame = 0;
+    //Serial.println(stringBuffer);
   }
 }
 
