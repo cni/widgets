@@ -112,23 +112,20 @@ byte g_verbose = 0;
 
 #define BUFF_SIZE_BITS 10
 // Teensy2.0++ has LED on D6
-#define PULSE_OUT_PIN 15
-#define TRIGGER_OUT_PIN 16
-#define TRIGGER_IN_INT 17
-#define TRIGGER_IN_PIN 18  // INT6 (pin E6)
+#define PULSE_OUT_PIN 8
+#define TRIGGER_OUT_PIN 9
+#define TRIGGER_IN_PIN 6
 #define LED_RED_PIN 5
 #define LED_GRN_PIN 4
 #define LED_BLU_PIN 3
 // uart rx is D2, tx is D3
 // Pin definitions for the OLED graphical display
+const byte OLED_DC_PIN = 14;
+const byte OLED_RS_PIN = 15;
+const byte OLED_CS_PIN = 10;
 // dat to pin 11
 // clk to pin 13
-// dc to pin 8
-// rs to pin 7
-// cs to gnd
-const byte OLED_DC_PIN = 6;
-const byte OLED_CS_PIN = 7;
-const byte OLED_RS_PIN = 8;
+// Pins needed: gnd, 0, 8-11, 13-17, 21-23, 3.3v,
 const byte SSD1306_LCDLINEWIDTH = 20;
 
 // Object to access the hardware serial port.
@@ -458,6 +455,9 @@ void loop(){
       Serial.print((char *)g_data.byteArray);
     }
     refreshDisplay(zscore, stringBuffer, ticDiff, pulseNow);
+  }else{
+    snprintf(stringBuffer,SSD1306_LCDLINEWIDTH+1,"Waiting for data...");
+    refreshDisplay(0, stringBuffer, 255, 0);    
   }
 
   updateOutPins();
@@ -609,8 +609,7 @@ void refreshDisplay(int zscore, char *stringBuffer, byte ticDiff, byte pulseOut)
       oled.drawRect(0, 8, 1, SSD1306_LCDHEIGHT-8, BLACK);
     }
     // Draw the status string at the top:
-    oled.setCursor(0,0);
-    oled.print("                     ");
+    oled.fillRect(0, 0, SSD1306_LCDWIDTH, 8, BLACK);
     oled.setCursor(0,0);
     oled.print(stringBuffer);
     // Finished drawing the the buffer; copy it to the device:
@@ -669,9 +668,9 @@ void setInTriggerState(byte state){
     digitalWrite(TRIGGER_IN_PIN, LOW);
   // Attach or detach the interrupt
   if(state)
-    attachInterrupt(TRIGGER_IN_INT, triggerIn, g_inPulseEdge);
+    attachInterrupt(TRIGGER_IN_PIN, triggerIn, g_inPulseEdge);
   else
-    detachInterrupt(TRIGGER_IN_INT);
+    detachInterrupt(TRIGGER_IN_PIN);
 }
 
 // The following is an interrupt routine that is run each time the
