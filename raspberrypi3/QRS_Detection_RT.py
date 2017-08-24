@@ -22,7 +22,7 @@
 #       For testing purposes, this code prompts users to input a time limit for the program. This is pointed out within the program too;
 # once the code is properly implemented, users may want to remove this feature. 
 
-#       See README.md for info on connecting the Raspberry Pi 3 GPIO pins to the serial output. 
+#       See README.txt for info on connecting the Raspberry Pi 3 GPIO pins to the serial output. 
 
 # Joe Sommer 2017 
 
