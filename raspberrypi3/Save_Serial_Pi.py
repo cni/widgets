@@ -8,7 +8,7 @@
 # the data to the checksum value in order to check for data corruption. 
 #       The program prompts the user to put in a time limit, then stops reading data after the time limit has passed. 
 
-#       See the Raspberry Pi section of README.md to see how to connect the Raspberry Pi 3 GPIO pins to the serial output. 
+#       See the hardware setup section of README.txt to see how to connect the Raspberry Pi 3 GPIO pins to the serial output. 
 # Joe Sommer, 2017 
 
 
