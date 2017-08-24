@@ -1,4 +1,5 @@
 This document provides general information about the QRS complex detection widget on Raspberry Pi 3.
+Joe Sommer, 2017 
 
 ## SOFTWARE SETUP ##
   The UART of the Pi has been reconfigured so that it connects to serial instead of Bluetooth within the device. 
