@@ -303,7 +303,6 @@ class Algorithm:
                 if self.qrsLocs.size == 0 or (DiffSumCheck1-DiffSumCheck2>self.thEVlimit and DiffSumCheck1*DiffSumCheck2<0 and DiffSumCheck1>self.thEVub and DiffSumCheck2<self.thEVlb and DiffSumCheck1<self.thEVub2 and DiffSumCheck2>self.thEVlb2):
                     self.QRScount = self.QRScount + 1
                     self.qrsLocs = np.concatenate((self.qrsLocs, np.copy([self.maxP_Buf-self.winsizeEL+2])),axis=0)
-                    #file.write(str(np.copy([self.maxP_Buf-self.winsizeEL+2])) + '\n')
                     file.write(str(self.maxP_Buf-self.winsizeEL+2) + '\n')
 
                     
