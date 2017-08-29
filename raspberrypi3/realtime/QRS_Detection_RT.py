@@ -230,9 +230,9 @@ class Algorithm:
         dSig = self.Fs*np.concatenate(([0], np.diff(sSig,axis=0)),axis=0)    # Signal after differentiating 
         sigLen = len(sSig)
         
-        filter_time = time.process_time() - current_time 
-        print('Filter time: ' + str(filter_time))
-        #print('---')
+        # Uncomment these 2 lines to display filter time for each iteration
+        #filter_time = time.process_time() - current_time 
+        #print('Filter time: ' + str(filter_time))
             
         #Initializes the arrays, then expands them each iteration after that
         if self.mem_allocation == 0: 
@@ -253,7 +253,6 @@ class Algorithm:
         
         ### Moving average w/ weight ###
         if self.kk == 193:
-        #if self.kk == LargeWin: 
             for i in np.arange(len(self.BUF1), self.kk-1): 
                 self.BUF1 = np.concatenate((self.BUF1, [[0]]),axis=0)
         self.BUF1 = np.concatenate((self.BUF1, [[(np.sum( sSig[self.kk-self.winsizeEL:self.kk],axis=0 )/self.winsizeEL)]]),axis=0)
@@ -380,10 +379,11 @@ while True:
             
             ecg1_algorithm.iterate(ecg1, ECG1_QRS)
             #ecg2_algorithm.iterate(ecg2, ECG2_QRS)
-           
-        iterationtime = time.process_time() - current_time 
-        print(iterationtime)
-        print('--')   
+        
+        # Uncomment the following 3 lines to display elapsed time for each iteration of the algorithm
+        #iterationtime = time.process_time() - current_time 
+        #print(iterationtime)
+        #print('--')   
         
     
     # TEST CODE: ends the program after TIMEOUT seconds for testing purposes
