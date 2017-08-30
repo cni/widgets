@@ -35,11 +35,12 @@ and the yellow pin connects to RXD (pin 10, 5th pin from the top left).'
 ## Programs ## 
   This folder contains three programs: Save_Serial_Pi.py, QRS_Detection.py, and QRS_Detection_RT.py. 
   
+  QRS_Detection_From_File.py performs QRS complex detection on a text file of prerecorded single-vector data. It is the algorithm and code on which QRS_Detection_RT.py is based on. To compare results with the Matlab code that the creators of the algorithm provided, run this program on ecg100.txt.  
+  
+  The following two programs are found within the folder realtime: 
+  
   Save_Serial_Pi.py is a simple program that reads in serial data for a certain amount of time and stores the information in 6 
 different text files. 
-  
-  QRS_Detection.py performs QRS complex detection on a text file of prerecorded single-vector data. It is the algorithm and code on which 
-QRS_Detection_RT.py is based on. 
 
   QRS_Detection_RT.py is currently still in development, but will ideally perform the algorithm from QRS_Detection.py on serial data 
 that is being read in real-time. This code is structured so that the algorithm itself is a class with an iteration function that 
