@@ -39,7 +39,7 @@ and the yellow pin connects to RXD (pin 10, 5th pin from the top left).'
   
   The following two programs are found within the folder realtime: 
   
-  Save_Serial_Pi.py is a simple program that reads in serial data for a certain amount of time and stores the information in 6 
+  Save_Serial_Stream.py is a simple program that reads in serial data for a certain amount of time and stores the information in 6 
 different text files. 
 
   QRS_Detection_RT.py is currently still in development, but will ideally perform the algorithm from QRS_Detection.py on serial data 
