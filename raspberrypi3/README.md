@@ -1,7 +1,11 @@
-This document provides general information about the QRS complex detection widget on Raspberry Pi 3.
-Joe Sommer, 2017 
+Raspberry Pi Widget Info
+==========
 
-## SOFTWARE SETUP ##
+This document provides general information about the QRS complex detection widget on Raspberry Pi 3.
+
+Joe Sommer, 2017
+
+## Software Setup ##
   The UART of the Pi has been reconfigured so that it connects to serial instead of Bluetooth within the device. 
 To read in serial data within a Python program, please import the module 'serial' and initialize with the following:
 
@@ -15,7 +19,7 @@ For more specific code on reading and interpreting serial data, please look at t
 QRS_Detection_RT.py. 
 
 
-## HARDWARE SETUP ## 
+## Hardware Setup ## 
   To connect the Raspberry Pi 3 to the serial cable, please refer to the images at the following link: http://imgur.com/a/TFTnM
 The GPIO pins are located on the back of the Pi. 
 
@@ -25,7 +29,7 @@ The red wire connects to 3.3V (pin 1, very bottom left), the black wire connects
 and the yellow pin connects to RXD (pin 10, 5th pin from the top left).'
 
 
-## PROGRAMS ## 
+## Programs ## 
   This folder contains three programs: Save_Serial_Pi.py, QRS_Detection.py, and QRS_Detection_RT.py. 
   
   Save_Serial_Pi.py is a simple program that reads in serial data for a certain amount of time and stores the information in 6 
