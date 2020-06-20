@@ -129,6 +129,7 @@ void messageReady() {
       break;
 
     case 'o': // Set out-pulse duration (msec)
+      i = 0; 
       while(g_message.available()) val[i++] = g_message.readInt();
       if(i>1){
         Serial << F("ERROR: Set output pulse duration requires no more than one param.\n");
@@ -182,7 +183,6 @@ void messageReady() {
   } // end while
 }
 
-
 void setup()
 {
   Serial.begin(BAUD);
@@ -226,8 +226,7 @@ void loop(){
   }
   if(OUT_PINREG){
     // Turn off all digital outputs after the requested duration.
-    // Detect and correct counter wrap-around:
-    if(millis()<g_digitalStart) g_digitalStart += 4294967295UL;
+    // Unsigned long subtraction handles wraparound implictly
     if(millis()-g_digitalStart > g_outPulseDuration)
       digitalOut(0);
   }
@@ -252,7 +251,7 @@ void setInPulseState(byte state){
 // The following is an interrupt routine that is run each time
 // a pulse is detected on the trigger input pin.
 void triggerIn(){
-  digitalOut(128);
+  //digitalOut(128);
   if(g_inPulseSerial)
     Serial << F("p");
 }
@@ -268,7 +267,7 @@ void triggerOut(){
 }
 
 void digitalOut(byte bitmask){
-  //OUT_PORTREG = OUT_PORTREG | bitmask;
+  OUT_PORTREG = OUT_PORTREG | bitmask;
   OUT_PORTREG = bitmask;
   g_digitalStart = millis();
 }
