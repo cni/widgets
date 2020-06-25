@@ -1,7 +1,6 @@
 /*
  * CNI trigger sketch for Arduino.
  *
- *
  * A simple sketch to generate TTl pulses when told to do so through a serial
  * port command.
  *
@@ -11,10 +10,11 @@
  * This sketch will also listen for input pulses and send out a serial port
  * character whenever one is detected. It uses an external interrupt, so it
  * can reliably detect very brief pulses. We use this to detect the GE 3.3v
- * scope trigger pulses (~4 usec pulse duration).
+ * scope trigger pulses (~2 usec pulse duration).  It will also flash a trigger 
+ * detect LED.
  *
+ * Copyright 2020 Robert F. Dougherty and Adam B. Kerr
  *
- * Copyright 2011 Robert F. Dougherty.
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -36,9 +36,14 @@
                    detected.
  * 2013.05.28 RFD: added 8 more triggerable outputs. (See the help text
  *                 below for usage info.)
+ * 2020.06.17 ABK: Fixed a problem with the output pulse duration code, 
+ *                 Cleaned up some time calculations. 
+ * 2020.06.17 ABK: Major rewrite to work with new hardware that includes
+ *                 a trigger detect LED that is pulsed every time a trigger
+ *                 pulse is seen. 
  */
 
-#define VERSION "2.0"
+#define VERSION "3.0"
 
 // Flash library is available from http://arduiniana.org/libraries/Flash/
 #include <Flash.h>
@@ -46,51 +51,41 @@
 
 #define BAUD 57600
 
-#define DEFAULT_OUT_PULSE_MSEC 5
-#define DEFAULT_IN_PULSE_STATE 0
-
-// Most Arduino boards have two external interrupts:
-// 0 (on digital pin 2) and 1 (on digital pin 3). On the
-// Teensy, these pins aremight be different (check docs).
-#define INTERRUPT 0
+#define DEFAULT_TRIG_OUT_PULSE_MSEC 5
+#define DEFAULT_LED_PULSE_MSEC 250
+#define DEFAULT_ECHO_TRIG_IN_STATE 0
 
 // The approximate duration of the output pulse, in milliseconds.
 // Note that we don't account for delays in the code, so it will
 // always be a bit longer than this.
-unsigned int g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
+unsigned int g_trigOutDur = DEFAULT_TRIG_OUT_PULSE_MSEC;
+unsigned int g_ledDur = DEFAULT_LED_PULSE_MSEC;
 
 // The input pin should be the pin mapped to INT0, unless you change
 // the interrupt number below. The output pin can be any digital pin.
 #if defined(__AVR_AT90USB1286__)
   // Teensy2.0++ has LED on D6 and INT0 on pin 0 (D0)
-  const byte g_outPin = 6;
-  const byte g_inPin = 0;
-  // We'll use port C (pins 0,1,2,3,13,14,15,4)
-  // PIN10 is port C on the teensy 2
-  #define OUT_PORTREG CORE_PIN10_PORTREG
-  #define OUT_PINREG CORE_PIN10_PINREG
-  static const byte c_outPins[] = {10, 11, 12, 13, 14, 15, 16, 17};
-#elif defined(__AVR_ATmega32U4__)
-  // Teensy2.0 has LED on pin 11 and INT0 on pin 5 (D0)
-  const byte g_outPin = 11;
-  const byte g_inPin = 5;
-  // We'll use port B (pins 0,1,2,3,13,14,15,4)
-  // PIN0 is port B on the teensy 2
-  #define OUT_PORTREG CORE_PIN0_PORTREG
-  #define OUT_PINREG CORE_PIN0_PINREG
-  static const byte c_outPins[] = {0, 1, 2, 3, 13, 14, 15, 4};
+  const byte g_buttonPin = 0;
+  const byte g_trigInPin = 1;
+  const byte g_detectLedPin = 4;
+  const byte g_trigOutLedPin = 5;
+  const byte g_trigOutPin = 6;
 #else
   #error "Unknown board!"
 #endif
+
 HardwareSerial g_uart = HardwareSerial();
 
-byte g_inPulseEdge = RISING;
+byte g_buttonInPulseEdge = RISING;
+byte g_trigInPulseEdge = RISING;
 
-volatile byte g_inPulseSerial = false;
+volatile byte g_echoTrigInPulseSerial = false;
 
-volatile byte g_outPinOn = false;
-volatile unsigned long g_outPulseStart;
-volatile unsigned long g_digitalStart;
+volatile byte g_trigOutPinOn = false;
+volatile unsigned long g_trigOutStart;
+
+volatile byte g_detectLedPinOn = false;
+volatile unsigned long g_detectStart;
 
 // Instantiate Messenger object used for serial port communication.
 Messenger g_message = Messenger(',','[',']');
@@ -108,20 +103,18 @@ void messageReady() {
 
     case '?': // display help text
       Serial << F("CNI Trigger Device\n");
-      Serial << F("Sends TTL pulses out on pin ") << (int)g_outPin << F(".\n");
-      Serial << F("Listens for pulses in on pin ") << (int)g_inPin << F(".\n");
-      Serial << F("Mirrors input pulses on pin ") << (int)c_outPins[7] << F(".\n");
+      Serial << F("Sends TTL pulses out on pin ") << (int)g_trigOutPin << F(".\n");
+      Serial << F("Listens for pulses in on pin ") << (int)g_trigInPin << F(".\n");
       Serial << F("\nCommands:\n");
       Serial << F("[t]   will send a trigger pulse. This also disables the input pulse\n");
       Serial << F("      being sent over serial. Send a [p] command to re-enable it.\n\n");
-      Serial << F("[d,N] will pulse any of the 7 digital outputs. The value N is a single\n");
-      Serial << F("      byte bitmask. The pins are (in order): ");
-      for(i=0; i<7; i++)  Serial << (int)c_outPins[i] << F(" ");
-      Serial << F("\n      E.g., to pulse pin ") << (int)c_outPins[0] << F(" and ") <<  (int)c_outPins[0] << F(", use [d,17] (1+16).\n\n");
-      Serial << F("[o,N] set the output pulse duration to N milliseconds. Send with\n");
+      Serial << F("[o,N] set the trig output pulse duration to N milliseconds. Send with\n");
       Serial << F("      no argument to show the current pulse duration.\n");
-      Serial << F("      Default duration is ") << DEFAULT_OUT_PULSE_MSEC << F(" ms.\n\n");
-      Serial << F("[p]   enable input pulses to be sent over the serial port. Send a [t] to disable.\n\n");
+      Serial << F("      Default duration is ") << DEFAULT_TRIG_OUT_PULSE_MSEC << F(" ms.\n\n");
+      Serial << F("[l,N] set the LED pulse durations to N milliseconds. Send with\n");
+      Serial << F("      no argument to show the current pulse duration.\n");
+      Serial << F("      Default duration is ") << DEFAULT_LED_PULSE_MSEC << F(" ms.\n\n");
+      Serial << F("[p]   Send a 'p' over the serial port when trigIn pulses detected. Send a [t] to disable.\n\n");
       Serial << F("[r]   reset default state.\n\n");
       Serial << F("[s,D] Send data (D) out over the local serial port. D can be up to 64\n");
       Serial << F("      bytes any binary data, except that it cannot contain the ASCII codes\n");
@@ -134,36 +127,53 @@ void messageReady() {
       if(i>1){
         Serial << F("ERROR: Set output pulse duration requires no more than one param.\n");
       }else if(i==1){
-          g_outPulseDuration = val[0];
+        g_trigOutDur = val[0];
       }
-      Serial << F("Output pulse duration is set to ") << g_outPulseDuration << F(" msec.\n");
+      Serial << F("Output pulse duration is set to ") << g_trigOutDur << F(" msec.\n");
+      break;
+
+    case 'l': // Set detect-pulse duration (msec)
+      i = 0; 
+      while(g_message.available()) val[i++] = g_message.readInt();
+      if(i>1){
+        Serial << F("ERROR: Set detect pulse duration requires no more than one param.\n");
+      }else if(i==1){
+          g_ledDur = val[0];
+      }
+      Serial << F("LED pulse durations are set to ") << g_ledDur << F(" msec.\n");
       break;
 
     case 't': // force output trigger
       triggerOut();
       // Automatically disable input pulse detection
-      g_inPulseSerial = false;
-      break;
-
-    case 'd': // fast digital output
-      while(g_message.available()) val[i++] = g_message.readInt();
-      if(i!=1){
-        Serial << F("ERROR: Digital output requires a single integer for the bitmask.\n");
-      }else if(i==1){
-          digitalOut(val[0]);
-      }
+      Serial << F("Disabling echo of input pulses\n");
+	    setEchoTrigInState(false);
       break;
 
     case 'p': // turn on input pulse detection
-      //Serial << F("Enabling input pulses\n");
-      g_inPulseSerial = true;
+      Serial << F("Enabling echo of input pulses\n");
+      setEchoTrigInState(true);
       break;
 
     case 'r': // reset
-      g_inPulseSerial = DEFAULT_IN_PULSE_STATE;
-      g_outPulseDuration = DEFAULT_OUT_PULSE_MSEC;
-      digitalWrite(g_outPin, LOW);
-      digitalOut(0);
+	    setEchoTrigInState(false);
+	  
+	    g_ledDur = DEFAULT_LED_PULSE_MSEC;
+
+      digitalWrite(g_trigOutPin, LOW);
+      digitalWrite(g_trigOutLedPin, LOW);
+	    g_trigOutPinOn = false; 
+      g_trigOutDur = DEFAULT_TRIG_OUT_PULSE_MSEC;
+	    g_buttonInPulseEdge = RISING;
+	    attachInterrupt(digitalPinToInterrupt(g_buttonPin),triggerOut,g_buttonInPulseEdge);
+
+      digitalWrite(g_detectLedPin, LOW);
+	    g_detectLedPinOn = false; 
+	    g_trigInPulseEdge = RISING;
+	    attachInterrupt(digitalPinToInterrupt(g_trigInPin),triggerDetect,g_trigInPulseEdge);
+
+      flashLights();
+
       break;
 
     case 's': // stream serial data
@@ -186,25 +196,43 @@ void messageReady() {
 void setup()
 {
   Serial.begin(BAUD);
+  Serial << F("\n\n");
   Serial << F("*********************************************************\n");
   Serial << F("* CNI Trigger firmware version ") << VERSION << F("\n");
-  Serial << F("* Copyright 2011 Bob Dougherty <bobd@stanford.edu>\n");
+  Serial << F("* Copyright 2020 Adam Kerr<akerr@stanford.edu>\n");
   Serial << F("* http://cniweb.stanford.edu/wiki/CNI_widgets\n");
   Serial << F("*********************************************************\n\n");
 
   // This probably isn't necessary- external interrupts work even in OUTPUT mode.
-  pinMode(g_inPin, INPUT);
-  pinMode(g_outPin, OUTPUT);
-  digitalWrite(g_outPin, LOW);
+  if (g_buttonInPulseEdge == FALLING)
+	  pinMode(g_buttonPin, INPUT_PULLUP);
+  else
+	  pinMode(g_buttonPin, INPUT);
+
+  if (g_trigInPulseEdge == FALLING)
+	  pinMode(g_trigInPin, INPUT_PULLUP);
+  else
+	  pinMode(g_trigInPin, INPUT);
+
+  g_ledDur = DEFAULT_LED_PULSE_MSEC;
+
+  pinMode(g_trigOutPin, OUTPUT);
+  pinMode(g_trigOutLedPin, OUTPUT);
+  digitalWrite(g_trigOutPin, LOW);
+  digitalWrite(g_trigOutLedPin, LOW);
+  g_trigOutPinOn = false; 
+  g_trigOutDur = DEFAULT_TRIG_OUT_PULSE_MSEC;
+  g_buttonInPulseEdge = RISING;
+  attachInterrupt(digitalPinToInterrupt(g_buttonPin),triggerOut,g_buttonInPulseEdge);
+
+  pinMode(g_detectLedPin, OUTPUT);
+  digitalWrite(g_detectLedPin, LOW);
+  g_detectLedPinOn = false; 
+  g_trigInPulseEdge = RISING;
+  attachInterrupt(digitalPinToInterrupt(g_trigInPin),triggerDetect,g_trigInPulseEdge);
   
-  for(byte i=0; i<8; i++){
-    // Could set this quickly by writing a bitmask to the data-direction reg (e.g., DDRB)
-    pinMode(c_outPins[i], OUTPUT);
-    digitalWrite(c_outPins[i], LOW);
-  }
-  
-  // Enable input pulse detection
-  setInPulseState(1);
+  // Disable input pulse echo to serial
+  setEchoTrigInState(false);
 
   // Attach the callback function to the Messenger
   g_message.attach(messageReady);
@@ -212,62 +240,86 @@ void setup()
   // Set up the UART to support streaming serial data through.
   g_uart.begin(BAUD);
 
+  flashLights(); 
+  
   Serial << F("CNI Trigger Ready. Send the ? command ([?]) for help.\n\n");
 }
 
 void loop(){
   // Reset the output, if needed:
-  if(g_outPinOn){
+  if(g_trigOutPinOn){
     // Turn off the output pin after the requested duration.
-    // Detect and correct counter wrap-around:
-    if(millis()<g_outPulseStart) g_outPulseStart += 4294967295UL;
-    if(millis()-g_outPulseStart > g_outPulseDuration)
-      digitalWrite(g_outPin, LOW);
+    if(millis()-g_trigOutStart > g_trigOutDur) { 
+      digitalWrite(g_trigOutPin, LOW);
+	}
+	if(millis()-g_trigOutStart > g_ledDur) { 
+	    g_trigOutPinOn = false; 
+		digitalWrite(g_trigOutLedPin, LOW);
+	    attachInterrupt(digitalPinToInterrupt(g_buttonPin),triggerOut,g_buttonInPulseEdge);
+	}
   }
-  if(OUT_PINREG){
-    // Turn off all digital outputs after the requested duration.
-    // Unsigned long subtraction handles wraparound implictly
-    if(millis()-g_digitalStart > g_outPulseDuration)
-      digitalOut(0);
+
+  if(g_detectLedPinOn){
+    // Turn off the output pin after the requested duration.
+    if(millis()-g_detectStart > g_ledDur) { 
+      digitalWrite(g_detectLedPin, LOW);
+	    g_detectLedPinOn = false; 
+	  }
   }
 
   // Handle Messenger's callback:
-  if(Serial.available())  g_message.process(Serial.read());
+  if(Serial.available())  g_message.process(Serial.read()); 
 }
 
-void setInPulseState(byte state){
-  // Turn on the internal pull-up resistor if we want to detect falling edges.
-  if(g_inPulseEdge==FALLING)
-    digitalWrite(g_inPin, HIGH);
-  else
-    digitalWrite(g_inPin, LOW);
-  // Attach or detach the interrupt
-  if(state)
-    attachInterrupt(INTERRUPT, triggerIn, g_inPulseEdge);
-  else
-    detachInterrupt(INTERRUPT);
+void setEchoTrigInState(byte state){
+	g_echoTrigInPulseSerial = state; 
 }
 
 // The following is an interrupt routine that is run each time
 // a pulse is detected on the trigger input pin.
-void triggerIn(){
-  //digitalOut(128);
-  if(g_inPulseSerial)
+void triggerDetect(){
+  // Turn on detect LED, disable interrupts until output pulse completed 
+  digitalWrite(g_detectLedPin, LOW);
+  g_detectStart = millis();
+  digitalWrite(g_detectLedPin, HIGH);
+  g_detectLedPinOn = true;
+
+  // Echo 'p' to serial line if desired
+  if(g_echoTrigInPulseSerial)
     Serial << F("p");
 }
 
 void triggerOut(){
-  // First force the pin low, in case it was already on. This will ensure that
-  // we get a change on the pin no matter what state we were in.
-  if(g_outPinOn) digitalWrite(g_outPin, LOW);
-  digitalWrite(g_outPin, HIGH);
-  g_outPinOn = true;
-  g_outPulseStart = millis();
-  //Serial << F("OUT\n");
+  // Turn on trigOut LED, disable interrupts until output pulse completed 
+  digitalWrite(g_trigOutPin, LOW);
+  g_trigOutStart = millis();
+  digitalWrite(g_trigOutPin, HIGH);
+  digitalWrite(g_trigOutLedPin, HIGH);
+  g_trigOutPinOn = true;
+  detachInterrupt(digitalPinToInterrupt(g_buttonPin));
+  // Serial << F("t");
 }
 
-void digitalOut(byte bitmask){
-  OUT_PORTREG = OUT_PORTREG | bitmask;
-  OUT_PORTREG = bitmask;
-  g_digitalStart = millis();
+void flashLights(){
+  int i; 
+
+  // Pulse each pin on in order then off
+  digitalWrite(g_detectLedPin, HIGH);
+  delay(500);
+  digitalWrite(g_trigOutLedPin, HIGH);
+  delay(500);
+  digitalWrite(g_detectLedPin, LOW);
+  delay(500);
+  digitalWrite(g_trigOutLedPin, LOW);
+  delay(500);
+
+  // Flash both LED rapidly
+  for (i = 0; i<3; i++) {
+    digitalWrite(g_detectLedPin, HIGH);
+	  digitalWrite(g_trigOutLedPin, HIGH);
+	  delay(200);
+	  digitalWrite(g_detectLedPin, LOW);
+	  digitalWrite(g_trigOutLedPin, LOW);
+	  delay(200);
+  }
 }

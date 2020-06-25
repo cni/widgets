@@ -36,6 +36,8 @@
                    detected.
  * 2013.05.28 RFD: added 8 more triggerable outputs. (See the help text
  *                 below for usage info.)
+ * 2020.06.17 ABK: Fixed a problem with the output pulse duration code, 
+ *                 Cleaned up some time calculations. 
  */
 
 #define VERSION "2.0"
